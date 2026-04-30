@@ -384,16 +384,11 @@ class IPCHandler:
 
 class TwitterSimulationRunner:
     """Twitter模拟运行器"""
-    
+
     # Twitter可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
-    AVAILABLE_ACTIONS = [
-        ActionType.CREATE_POST,
-        ActionType.LIKE_POST,
-        ActionType.REPOST,
-        ActionType.FOLLOW,
-        ActionType.DO_NOTHING,
-        ActionType.QUOTE_POST,
-    ]
+    # Single Source of Truth: backend/app/oasis_actions.py
+    from app.oasis_actions import get_twitter_action_types as _get_twitter_action_types
+    AVAILABLE_ACTIONS = _get_twitter_action_types()
     
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """

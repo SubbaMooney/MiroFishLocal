@@ -94,15 +94,16 @@ class Config:
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
 
-    # OASIS平台可用动作配置
-    OASIS_TWITTER_ACTIONS = [
-        'CREATE_POST', 'LIKE_POST', 'REPOST', 'FOLLOW', 'DO_NOTHING', 'QUOTE_POST'
-    ]
-    OASIS_REDDIT_ACTIONS = [
-        'LIKE_POST', 'DISLIKE_POST', 'CREATE_POST', 'CREATE_COMMENT',
-        'LIKE_COMMENT', 'DISLIKE_COMMENT', 'SEARCH_POSTS', 'SEARCH_USER',
-        'TREND', 'REFRESH', 'DO_NOTHING', 'FOLLOW', 'MUTE'
-    ]
+    # OASIS平台可用动作配置（Single Source of Truth: app.oasis_actions）
+    # Worker 脚本（backend/scripts/run_*_simulation.py）也从同一来源读取，
+    # 防止配置漂移。详见 backend/app/oasis_actions.py 模块说明。
+    # 该模块不属于 app.services 包，避免与 services/__init__.py 形成循环导入。
+    from .oasis_actions import (
+        TWITTER_ACTION_NAMES as _TWITTER_ACTION_NAMES,
+        REDDIT_ACTION_NAMES as _REDDIT_ACTION_NAMES,
+    )
+    OASIS_TWITTER_ACTIONS = list(_TWITTER_ACTION_NAMES)
+    OASIS_REDDIT_ACTIONS = list(_REDDIT_ACTION_NAMES)
 
     # Report Agent配置
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))

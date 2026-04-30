@@ -174,32 +174,14 @@ except ImportError as e:
     sys.exit(1)
 
 
-# Twitter可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
-TWITTER_ACTIONS = [
-    ActionType.CREATE_POST,
-    ActionType.LIKE_POST,
-    ActionType.REPOST,
-    ActionType.FOLLOW,
-    ActionType.DO_NOTHING,
-    ActionType.QUOTE_POST,
-]
-
-# Reddit可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
-REDDIT_ACTIONS = [
-    ActionType.LIKE_POST,
-    ActionType.DISLIKE_POST,
-    ActionType.CREATE_POST,
-    ActionType.CREATE_COMMENT,
-    ActionType.LIKE_COMMENT,
-    ActionType.DISLIKE_COMMENT,
-    ActionType.SEARCH_POSTS,
-    ActionType.SEARCH_USER,
-    ActionType.TREND,
-    ActionType.REFRESH,
-    ActionType.DO_NOTHING,
-    ActionType.FOLLOW,
-    ActionType.MUTE,
-]
+# Twitter / Reddit 可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
+# Single Source of Truth: backend/app/oasis_actions.py
+from app.oasis_actions import (
+    get_twitter_action_types as _get_twitter_action_types,
+    get_reddit_action_types as _get_reddit_action_types,
+)
+TWITTER_ACTIONS = _get_twitter_action_types()
+REDDIT_ACTIONS = _get_reddit_action_types()
 
 
 # IPC相关常量

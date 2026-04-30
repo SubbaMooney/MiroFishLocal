@@ -384,23 +384,11 @@ class IPCHandler:
 
 class RedditSimulationRunner:
     """Reddit模拟运行器"""
-    
+
     # Reddit可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
-    AVAILABLE_ACTIONS = [
-        ActionType.LIKE_POST,
-        ActionType.DISLIKE_POST,
-        ActionType.CREATE_POST,
-        ActionType.CREATE_COMMENT,
-        ActionType.LIKE_COMMENT,
-        ActionType.DISLIKE_COMMENT,
-        ActionType.SEARCH_POSTS,
-        ActionType.SEARCH_USER,
-        ActionType.TREND,
-        ActionType.REFRESH,
-        ActionType.DO_NOTHING,
-        ActionType.FOLLOW,
-        ActionType.MUTE,
-    ]
+    # Single Source of Truth: backend/app/oasis_actions.py
+    from app.oasis_actions import get_reddit_action_types as _get_reddit_action_types
+    AVAILABLE_ACTIONS = _get_reddit_action_types()
     
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """
