@@ -40,7 +40,16 @@ def main():
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     port = int(os.environ.get('FLASK_PORT', 5001))
     debug = Config.DEBUG
-    
+
+    # Sicherheits-Hard-Refusal:
+    # Werkzeug-Debugger erlaubt RCE über die Debug-PIN, sobald er an einer
+    # öffentlichen Schnittstelle gebunden ist. Wir verweigern den Start hart.
+    if debug and host in ('0.0.0.0', '::', '*'):
+        sys.exit(
+            "ABBRUCH: Refuse to start with FLASK_DEBUG=True on a public interface. "
+            "Werkzeug-Debugger erlaubt RCE. Set FLASK_HOST=127.0.0.1 oder FLASK_DEBUG=False."
+        )
+
     # 启动服务
     app.run(host=host, port=port, debug=debug, threaded=True)
 
