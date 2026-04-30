@@ -721,57 +721,98 @@ class SimulationRunner:
     def _terminate_process(cls, process: subprocess.Popen, simulation_id: str, timeout: int = 10):
         """
         跨平台终止进程及其子进程
-        
+
         Args:
             process: 要终止的进程
             simulation_id: 模拟ID（用于日志）
-            timeout: 等待进程退出的超时时间（秒）
+            timeout: 等待进程退出的超时时间（秒）—— 即"graceful window"
         """
+        # 终止前记录起点，便于诊断 graceful 窗口实际耗时
+        _t_start = time.monotonic()
+        pid = process.pid
+
         if IS_WINDOWS:
             # Windows: 使用 taskkill 命令终止进程树
             # /F = 强制终止, /T = 终止进程树（包括子进程）
-            logger.info(f"终止进程树 (Windows): simulation={simulation_id}, pid={process.pid}")
+            logger.info(
+                f"终止进程树 (Windows): simulation={simulation_id}, pid={pid}, "
+                f"graceful_timeout={timeout}s"
+            )
             try:
                 # 先尝试优雅终止
                 subprocess.run(
-                    ['taskkill', '/PID', str(process.pid), '/T'],
+                    ['taskkill', '/PID', str(pid), '/T'],
                     capture_output=True,
                     timeout=5
                 )
                 try:
                     process.wait(timeout=timeout)
+                    elapsed = time.monotonic() - _t_start
+                    logger.info(
+                        f"进程已优雅退出 (Windows): simulation={simulation_id}, "
+                        f"pid={pid}, elapsed={elapsed:.2f}s"
+                    )
                 except subprocess.TimeoutExpired:
                     # 强制终止
-                    logger.warning(f"进程未响应，强制终止: {simulation_id}")
+                    logger.warning(
+                        f"进程未响应优雅终止，强制 taskkill /F: "
+                        f"simulation={simulation_id}, pid={pid}, waited={timeout}s"
+                    )
                     subprocess.run(
-                        ['taskkill', '/F', '/PID', str(process.pid), '/T'],
+                        ['taskkill', '/F', '/PID', str(pid), '/T'],
                         capture_output=True,
                         timeout=5
                     )
                     process.wait(timeout=5)
+                    elapsed = time.monotonic() - _t_start
+                    logger.warning(
+                        f"进程被强制终止 (Windows): simulation={simulation_id}, "
+                        f"pid={pid}, total_elapsed={elapsed:.2f}s"
+                    )
             except Exception as e:
-                logger.warning(f"taskkill 失败，尝试 terminate: {e}")
+                logger.warning(f"taskkill 失败，尝试 terminate: simulation={simulation_id}, error={e}")
                 process.terminate()
                 try:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
+                elapsed = time.monotonic() - _t_start
+                logger.warning(
+                    f"进程被 fallback 终止 (Windows): simulation={simulation_id}, "
+                    f"pid={pid}, total_elapsed={elapsed:.2f}s"
+                )
         else:
             # Unix: 使用进程组终止
             # 由于使用了 start_new_session=True，进程组 ID 等于主进程 PID
             pgid = os.getpgid(process.pid)
-            logger.info(f"终止进程组 (Unix): simulation={simulation_id}, pgid={pgid}")
-            
+            logger.info(
+                f"终止进程组 (Unix): simulation={simulation_id}, pid={pid}, "
+                f"pgid={pgid}, graceful_timeout={timeout}s"
+            )
+
             # 先发送 SIGTERM 给整个进程组
             os.killpg(pgid, signal.SIGTERM)
-            
+
             try:
                 process.wait(timeout=timeout)
+                elapsed = time.monotonic() - _t_start
+                logger.info(
+                    f"进程组已响应 SIGTERM 优雅退出 (Unix): simulation={simulation_id}, "
+                    f"pid={pid}, pgid={pgid}, elapsed={elapsed:.2f}s"
+                )
             except subprocess.TimeoutExpired:
                 # 如果超时后还没结束，强制发送 SIGKILL
-                logger.warning(f"进程组未响应 SIGTERM，强制终止: {simulation_id}")
+                logger.warning(
+                    f"进程组未响应 SIGTERM，强制 SIGKILL: simulation={simulation_id}, "
+                    f"pid={pid}, pgid={pgid}, waited={timeout}s"
+                )
                 os.killpg(pgid, signal.SIGKILL)
                 process.wait(timeout=5)
+                elapsed = time.monotonic() - _t_start
+                logger.warning(
+                    f"进程组被 SIGKILL 强制终止 (Unix): simulation={simulation_id}, "
+                    f"pid={pid}, pgid={pgid}, total_elapsed={elapsed:.2f}s"
+                )
     
     @classmethod
     def stop_simulation(cls, simulation_id: str) -> SimulationRunState:
@@ -1187,22 +1228,31 @@ class SimulationRunner:
     def cleanup_all_simulations(cls):
         """
         清理所有运行中的模拟进程
-        
-        在服务器关闭时调用，确保所有子进程被终止
+
+        在服务器关闭时调用，确保所有子进程被终止。
+        幂等：多次调用不会重复执行（_cleanup_done 锁）。
         """
         # 防止重复清理
         if cls._cleanup_done:
             return
         cls._cleanup_done = True
-        
+
         # 检查是否有内容需要清理（避免空进程的进程打印无用日志）
         has_processes = bool(cls._processes)
         has_updaters = bool(cls._graph_memory_enabled)
-        
+
         if not has_processes and not has_updaters:
             return  # 没有需要清理的内容，静默返回
-        
-        logger.info("正在清理所有模拟进程...")
+
+        # 跟踪本次清理的总耗时和成功终止的 PID 列表，便于诊断
+        _cleanup_t_start = time.monotonic()
+        _terminated_pids: List[int] = []
+        _failed_simulations: List[str] = []
+
+        logger.info(
+            f"开始清理模拟进程: processes={len(cls._processes)}, "
+            f"graph_updaters={len(cls._graph_memory_enabled)}"
+        )
         
         # 首先停止所有图谱记忆更新器（stop_all 内部会打印日志）
         try:
@@ -1217,8 +1267,9 @@ class SimulationRunner:
         for simulation_id, process in processes:
             try:
                 if process.poll() is None:  # 进程仍在运行
-                    logger.info(f"终止模拟进程: {simulation_id}, pid={process.pid}")
-                    
+                    _pid = process.pid
+                    logger.info(f"终止模拟进程: {simulation_id}, pid={_pid}")
+
                     try:
                         # 使用跨平台的进程终止方法
                         cls._terminate_process(process, simulation_id, timeout=5)
@@ -1229,6 +1280,7 @@ class SimulationRunner:
                             process.wait(timeout=3)
                         except Exception:
                             process.kill()
+                    _terminated_pids.append(_pid)
                     
                     # 更新 run_state.json
                     state = cls.get_run_state(simulation_id)
@@ -1260,7 +1312,8 @@ class SimulationRunner:
                         
             except Exception as e:
                 logger.error(f"清理进程失败: {simulation_id}, error={e}")
-        
+                _failed_simulations.append(simulation_id)
+
         # 清理文件句柄
         for simulation_id, file_handle in list(cls._stdout_files.items()):
             try:
@@ -1281,19 +1334,34 @@ class SimulationRunner:
         # 清理内存中的状态
         cls._processes.clear()
         cls._action_queues.clear()
-        
-        logger.info("模拟进程清理完成")
+
+        # 清理总结日志：包含终止的 PID 列表、失败项、总耗时
+        _cleanup_elapsed = time.monotonic() - _cleanup_t_start
+        if _failed_simulations:
+            logger.warning(
+                f"模拟进程清理完成（部分失败）: terminated_pids={_terminated_pids}, "
+                f"failed_simulations={_failed_simulations}, total_elapsed={_cleanup_elapsed:.2f}s"
+            )
+        else:
+            logger.info(
+                f"模拟进程清理完成: terminated_pids={_terminated_pids}, "
+                f"total_elapsed={_cleanup_elapsed:.2f}s"
+            )
     
     @classmethod
     def register_cleanup(cls):
         """
-        注册清理函数
-        
-        在 Flask 应用启动时调用，确保服务器关闭时清理所有模拟进程
+        注册清理函数（幂等）
+
+        在 Flask 应用启动时调用，确保服务器关闭时清理所有模拟进程。
+        多次调用安全：模块级 _cleanup_registered 标志保证 atexit 与 signal
+        handler 只会被注册一次，绝不会出现重复注册导致的多次清理。
         """
         global _cleanup_registered
-        
+
         if _cleanup_registered:
+            # 幂等：已注册，直接返回。debug 级日志便于诊断意外的重复调用。
+            logger.debug("register_cleanup() 已被调用过，跳过重复注册（幂等）")
             return
         
         # Flask debug 模式下，只在 reloader 子进程中注册清理（实际运行应用的进程）
