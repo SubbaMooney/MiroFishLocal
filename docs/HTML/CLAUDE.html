@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CLAUDE.md — MiroFish</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #58a6ff;
+    --code-bg: #161b22;
+    --border: #30363d;
+    --table-stripe: #161b22;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0969da;
+      --code-bg: #f6f8fa;
+      --border: #d0d7de;
+      --table-stripe: #f6f8fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 980px;
+    margin: 2rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1, h2, h3, h4 { line-height: 1.25; }
+  h1 { border-bottom: 1px solid var(--border); padding-bottom: .3em; font-size: 2em; }
+  h2 { border-bottom: 1px solid var(--border); padding-bottom: .3em; margin-top: 2em; font-size: 1.5em; }
+  h3 { margin-top: 1.6em; font-size: 1.2em; }
+  p, li { color: var(--fg); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd, samp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 3px solid var(--border);
+    color: var(--muted);
+    margin: 1em 0;
+    padding: 0 1em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  .mermaid { text-align: center; margin: 1.5em 0; }
+  .topbar {
+    background: var(--code-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1.5rem;
+    font-size: 0.9em;
+    color: var(--muted);
+  }
+  .topbar a { margin-right: 1rem; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="./index.html">Index</a>
+  <span>MiroFish · CLAUDE.md (HTML-Spiegel)</span>
+</div>
+
+<main>
+
+<h1>CLAUDE.md</h1>
+<p>This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.</p>
+
+<h2>Project</h2>
+<p><strong>MiroFish</strong> ist eine AGPL-3.0 lizenzierte Multi-Agent Simulations-Engine. Aus „Seed“-Eingaben (PDF/MD/TXT-Berichte oder Stories) wird eine GraphRAG-Wissensbasis aufgebaut, daraus Agent-Personas generiert und auf simulierten Twitter/Reddit-Plattformen (über das <code>camel-oasis</code> Framework) parallel laufen gelassen, um Verlauf und Reaktionen vorherzusagen. Sprachoberfläche EN/ZH.</p>
+
+<h2>Tech Stack</h2>
+<ul>
+  <li><strong>Backend</strong>: Python 3.11–3.12, Flask 3, <code>uv</code> als Paketmanager, OpenAI-SDK-kompatible LLM-API, Zep Cloud (Memory Graph), <code>camel-oasis</code> (Simulation), PyMuPDF.</li>
+  <li><strong>Frontend</strong>: Vue 3 + Vite 7, Vue Router, vue-i18n, Axios, D3.</li>
+  <li><strong>Locales</strong>: Geteilt zwischen Frontend und (potentiell) Backend in <code>/locales/{en,zh,languages}.json</code>. Vite-Alias <code>@locales</code> zeigt auf <code>../locales</code>.</li>
+</ul>
+
+<h2>Common Commands</h2>
+<p>Alle aus dem Repo-Root, sofern nicht anders angegeben.</p>
+<pre><code># Erstinstallation (Node + Python via uv)
+npm run setup:all
+
+# Dev-Server: Backend (5001) + Frontend (3000) parallel via concurrently
+npm run dev
+
+# Einzeln
+npm run backend     # uv run python run.py
+npm run frontend    # vite --host
+npm run build       # Production-Build des Frontends
+
+# Docker (komponiert aus root .env)
+docker compose up -d
+</code></pre>
+
+<p>Tests (Backend): pytest ist als optional-dependency definiert, aber <strong>es existieren keine <code>tests/</code>-Verzeichnisse</strong>. <code>backend/scripts/test_profile_format.py</code> ist ein Standalone-Smoke-Test, kein pytest-Suite. Vor dem Schreiben neuer Tests prüfen, ob ein test-Verzeichnis angelegt werden soll und mit <code>uv run pytest &lt;path&gt;</code> laufen lassen.</p>
+
+<p>Frontend hat keinen Test-Runner konfiguriert. <code>npm run preview</code> dient nur zur lokalen Vorschau eines Builds.</p>
+
+<h2>Required Environment</h2>
+<p><code>.env</code> im Repo-Root (von <code>backend/app/config.py</code> geladen — <strong>nicht</strong> in <code>backend/</code>):</p>
+
+<table>
+  <thead><tr><th>Variable</th><th>Pflicht</th><th>Zweck</th></tr></thead>
+  <tbody>
+    <tr><td><code>LLM_API_KEY</code> / <code>LLM_BASE_URL</code> / <code>LLM_MODEL_NAME</code></td><td>ja</td><td>Haupt-LLM (OpenAI-SDK-Format, default Qwen via Bailian)</td></tr>
+    <tr><td><code>ZEP_API_KEY</code></td><td>ja</td><td>Zep Cloud Memory Graph</td></tr>
+    <tr><td><code>LLM_BOOST_*</code></td><td>optional</td><td>„Boost“-LLM für Speed-kritische Calls — <strong>wenn ungenutzt, Variablen ganz entfernen, nicht leer lassen</strong></td></tr>
+    <tr><td><code>FLASK_HOST</code> / <code>FLASK_PORT</code> / <code>FLASK_DEBUG</code></td><td>optional</td><td>Server-Binding (Default <code>0.0.0.0:5001</code>, Debug an)</td></tr>
+    <tr><td><code>OASIS_DEFAULT_MAX_ROUNDS</code></td><td>optional</td><td>Default-Rundenzahl pro Simulation (Default 10)</td></tr>
+    <tr><td><code>REPORT_AGENT_MAX_TOOL_CALLS</code> / <code>REPORT_AGENT_MAX_REFLECTION_ROUNDS</code> / <code>REPORT_AGENT_TEMPERATURE</code></td><td>optional</td><td>Tuning des Report-Agents</td></tr>
+  </tbody>
+</table>
+
+<p><code>Config.validate()</code> erzwingt <code>LLM_API_KEY</code> und <code>ZEP_API_KEY</code> beim Start; Fehlen führt zu <code>sys.exit(1)</code>.</p>
+
+<h2>Architecture (Big Picture)</h2>
+<p>Das System ist eine 5-Stufen-Pipeline. Frontend-Komponenten (<code>Step1GraphBuild</code> … <code>Step5Interaction</code>) entsprechen direkt den Backend-Phasen.</p>
+
+<div class="mermaid">
+flowchart LR
+  Seed["Seed (PDF / MD / TXT)"] --> S1["1 Graph Build<br/>Text Processor · Ontology · Zep GraphRAG"]
+  S1 --> S2["2 Env Setup<br/>Persona Generation · Agent Configs"]
+  S2 --> S3["3 Simulation<br/>Twitter / Reddit Subprozesse · IPC"]
+  S3 --> S4["4 Report<br/>ReportAgent + Tools"]
+  S4 --> S5["5 Interaction<br/>Chat mit Agents / ReportAgent"]
+</div>
+
+<h3>Backend-Topologie (<code>backend/app/</code>)</h3>
+<ul>
+  <li><strong>Flask-App-Factory</strong> (<code>app/__init__.py</code>): Registriert drei Blueprints unter <code>/api/graph</code>, <code>/api/simulation</code>, <code>/api/report</code>. Health-Endpoint unter <code>/health</code>. CORS offen für <code>/api/*</code>. JSON <code>ensure_ascii=False</code> für CJK-Output. Registriert <code>SimulationRunner.register_cleanup()</code> als atexit-Hook — <strong>das ist kritisch</strong>: Simulationen laufen als Subprozesse und müssen beim Server-Shutdown getötet werden.</li>
+  <li><strong>API-Schicht</strong> (<code>app/api/</code>): Dünn, route-only — <code>graph.py</code>, <code>simulation.py</code>, <code>report.py</code>. Business-Logik gehört nach <code>services/</code>.</li>
+  <li><strong>Services</strong> (<code>app/services/</code>):
+    <ul>
+      <li><code>graph_builder.py</code>, <code>text_processor.py</code>, <code>ontology_generator.py</code> — Stufe 1 (Seed-Verarbeitung &amp; GraphRAG).</li>
+      <li><code>oasis_profile_generator.py</code>, <code>simulation_config_generator.py</code> — Stufe 2 (Persona &amp; Konfig).</li>
+      <li><code>simulation_runner.py</code>, <code>simulation_manager.py</code>, <code>simulation_ipc.py</code> — Stufe 3 (Subprozess-Lifecycle, IPC zwischen Flask und den <code>scripts/run_*_simulation.py</code> Workern).</li>
+      <li><code>report_agent.py</code> — Stufe 4 (LLM-Agent mit Tool-Calls).</li>
+      <li><code>zep_*</code> — alle Zep-Cloud-Interaktionen (Memory Graph Reads/Writes, Paging, Tool-Bindings).</li>
+    </ul>
+  </li>
+  <li><strong>Utils</strong> (<code>app/utils/</code>): <code>llm_client.py</code> (OpenAI-SDK-Wrapper), <code>file_parser.py</code> (PDF/Text-Extraktion mit Encoding-Detection), <code>logger.py</code>, <code>retry.py</code>, <code>locale.py</code>.</li>
+  <li><strong>Models</strong> (<code>app/models/</code>): Daten-Klassen für <code>project</code> und <code>task</code>.</li>
+  <li><strong>Scripts</strong> (<code>backend/scripts/</code>): <strong>Werden als eigene Prozesse vom Backend gestartet</strong>, nicht direkt manuell aufrufen. <code>run_parallel_simulation.py</code> orchestriert Twitter+Reddit; <code>run_twitter_simulation.py</code> und <code>run_reddit_simulation.py</code> sind die plattform-spezifischen Worker. <code>action_logger.py</code> schreibt Telemetrie pro Runde.</li>
+  <li><strong>Uploads</strong> (<code>backend/uploads/</code>): Persistenter Storage für Seed-Files und <code>simulations/</code> (per Run getrennt). Im Docker-Compose als Volume gemountet.</li>
+</ul>
+
+<h3>Frontend-Topologie (<code>frontend/src/</code>)</h3>
+<ul>
+  <li><strong>Views</strong> = Routen-Container, <strong>Components</strong> = Wiederverwendbare UI-Bausteine. Die <code>Step1</code>–<code>Step5</code>-Komponenten bilden die Pipeline ab; <code>GraphPanel.vue</code> rendert die GraphRAG-Visualisierung (D3).</li>
+  <li><strong>API-Layer</strong> (<code>src/api/</code>): Axios-Wrapper pro Backend-Blueprint (<code>graph.js</code>, <code>simulation.js</code>, <code>report.js</code>, gemeinsame <code>index.js</code>). Vite-Dev-Proxy leitet <code>/api</code> → <code>http://localhost:5001</code>.</li>
+  <li><strong>i18n</strong>: Sprachen werden aus <code>/locales/*.json</code> (Repo-Root) gezogen, nicht aus <code>frontend/src/i18n/</code> allein. Bei neuen Strings beide Locales (<code>en.json</code>, <code>zh.json</code>) aktuell halten.</li>
+  <li><strong>Store</strong> (<code>src/store/pendingUpload.js</code>): Sehr kleines, custom State-Modul — kein Pinia/Vuex.</li>
+</ul>
+
+<h2>Wichtige Konventionen</h2>
+<ul>
+  <li><strong>Sprache im Code</strong>: Kommentare und Log-Messages sind überwiegend Chinesisch. Das ist beabsichtigt — bei Änderungen den Stil beibehalten und nicht „auf Englisch übersetzen“.</li>
+  <li><strong>CJK-Encoding</strong>: <code>run.py</code> rekonfiguriert stdout für UTF-8 unter Windows; Flask hat <code>ensure_ascii=False</code>. Bei Logging/JSON-Output <strong>nicht</strong> durch eigene <code>json.dumps(..., ensure_ascii=True)</code> Calls untergraben.</li>
+  <li><strong>LLM-Konfig</strong>: Immer über <code>Config</code> (aus <code>app.config</code>) lesen, nicht direkt <code>os.environ</code>. Boost-LLM ist optional und darf nur verwendet werden, wenn alle drei Variablen gesetzt sind.</li>
+  <li><strong>Subprozess-Disziplin</strong>: Alle Simulations-Worker laufen via <code>SimulationRunner</code>. Niemals <code>subprocess.Popen</code> direkt einbauen — sonst werden sie beim Shutdown nicht gekillt.</li>
+  <li><strong>OASIS Action Sets</strong>: <code>Config.OASIS_TWITTER_ACTIONS</code> und <code>OASIS_REDDIT_ACTIONS</code> sind die einzige Source of Truth für plattformfähige Aktionen. Worker-Scripts sollten diese Listen importieren statt hartzukodieren.</li>
+  <li><strong>File Uploads</strong>: 50 MB Limit, Whitelist <code>{pdf, md, txt, markdown}</code> (siehe <code>Config.ALLOWED_EXTENSIONS</code>).</li>
+</ul>
+
+<h2>Documentation Files</h2>
+<p>Per User-Standard gilt: Bei jeder neuen oder geänderten <code>.md</code> parallel ein HTML-Pendant unter <code>docs/HTML/</code> mit aktueller Mermaid-Unterstützung erzeugen, samt Update der Index-Übersicht. Keine Emoticons in <code>.md</code>-Dateien.</p>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: isDark ? "dark" : "default",
+    securityLevel: "loose",
+    flowchart: { htmlLabels: true, curve: "basis" }
+  });
+</script>
+
+</body>
+</html>

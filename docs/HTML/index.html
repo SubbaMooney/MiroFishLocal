@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MiroFish — Dokumentations-Index</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #58a6ff;
+    --card: #161b22;
+    --border: #30363d;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0969da;
+      --card: #f6f8fa;
+      --border: #d0d7de;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 880px;
+    margin: 3rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 {
+    font-size: 2em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4em;
+  }
+  h2 { margin-top: 2em; font-size: 1.3em; }
+  p { color: var(--muted); }
+  ul.docs { list-style: none; padding: 0; }
+  ul.docs li {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 0.8rem;
+  }
+  ul.docs li a {
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 1.05em;
+  }
+  ul.docs li a:hover { text-decoration: underline; }
+  ul.docs li .desc {
+    display: block;
+    color: var(--muted);
+    margin-top: 0.25em;
+    font-size: 0.93em;
+  }
+  code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  footer {
+    margin-top: 3em;
+    padding-top: 1em;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>MiroFish — Dokumentations-Index</h1>
+  <p>HTML-Spiegel der Markdown-Dokumente im Repository. Diagramme werden über Mermaid v11 gerendert.</p>
+
+  <h2>Verfügbare Dokumente</h2>
+  <ul class="docs">
+    <li>
+      <a href="./CLAUDE.html">CLAUDE.md</a>
+      <span class="desc">Leitfaden für Claude Code: Befehle, Architektur, Konventionen.</span>
+    </li>
+  </ul>
+
+  <h2>Quell-Dokumente (Markdown im Repo)</h2>
+  <ul class="docs">
+    <li>
+      <a href="../../CLAUDE.md"><code>CLAUDE.md</code></a>
+      <span class="desc">Quelle für die HTML-Version oben.</span>
+    </li>
+    <li>
+      <a href="../../README.md"><code>README.md</code></a>
+      <span class="desc">Englischsprachige Projekt-Übersicht (offizielle Default-README).</span>
+    </li>
+    <li>
+      <a href="../../README-ZH.md"><code>README-ZH.md</code></a>
+      <span class="desc">Chinesischsprachige Projekt-Übersicht.</span>
+    </li>
+  </ul>
+
+  <footer>
+    Auto-generiert parallel zu <code>CLAUDE.md</code> · Layout passt sich an Light/Dark-Mode an.
+  </footer>
+</main>
+</body>
+</html>
