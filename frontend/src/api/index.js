@@ -10,6 +10,45 @@ const service = axios.create({
   }
 })
 
+// Fix M4: Backend-Error-Strings (potenziell mit Stack-Traces, vgl.
+// Backend-C5-Audit) dürfen nicht roh in UI-Komponenten fließen, weil
+// sie sonst über v-html (Step4/Step5) reflektiertes XSS auslösen
+// können. Wir mappen daher HTTP-Statuscodes auf generische Texte.
+// Der echte Server-Error landet auf err.serverError für Console-Logs,
+// nicht in err.message.
+//
+// TODO(i18n): Sobald der i18n-Katalog generische HTTP-Fehlermeldungen
+// in zh.json/en.json enthält, sollten die unten hartkodierten
+// deutschen Strings durch i18n.global.t('http.<status>') ersetzt
+// werden. Aktuell bewusst hartkodiert, damit der Fix unabhängig vom
+// Locale-Stand greift.
+const STATUS_MESSAGES = {
+  400: 'Ungültige Anfrage',
+  401: 'Nicht authentifiziert',
+  403: 'Keine Berechtigung',
+  404: 'Nicht gefunden',
+  408: 'Anfrage-Zeitüberschreitung',
+  409: 'Konflikt — bitte erneut versuchen',
+  413: 'Datei zu groß',
+  422: 'Ungültige Eingabedaten',
+  429: 'Zu viele Anfragen — bitte kurz warten',
+  500: 'Serverfehler — bitte erneut versuchen',
+  502: 'Service nicht erreichbar',
+  503: 'Service nicht verfügbar',
+  504: 'Service-Zeitüberschreitung'
+}
+
+const buildSafeError = (statusCode, rawServerError) => {
+  const message =
+    (statusCode && STATUS_MESSAGES[statusCode]) || 'Unerwarteter Fehler'
+  const err = new Error(message)
+  err.statusCode = statusCode || null
+  // serverError ist bewusst eine private Property: nur fürs Logging,
+  // niemals direkt im UI rendern.
+  err.serverError = rawServerError || null
+  return err
+}
+
 // 请求拦截器
 service.interceptors.request.use(
   config => {
@@ -26,29 +65,52 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   response => {
     const res = response.data
-    
+
     // 如果返回的状态码不是success，则抛出错误
     if (!res.success && res.success !== undefined) {
-      console.error('API Error:', res.error || res.message || 'Unknown error')
-      return Promise.reject(new Error(res.error || res.message || 'Error'))
+      const rawServerError = res.error || res.message || null
+      const err = buildSafeError(response?.status, rawServerError)
+      // Logging weiterhin mit dem rohen Server-Error, aber explizit
+      // als separater Parameter — kein Splicing in einen Render-Pfad.
+      console.error('API Error:', err.statusCode, err.serverError)
+      return Promise.reject(err)
     }
-    
+
     return res
   },
   error => {
-    console.error('Response error:', error)
-    
-    // 处理超时
-    if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
-      console.error('Request timeout')
+    // Server hat geantwortet, aber mit Fehler-Status?
+    if (error.response) {
+      const rawServerError =
+        error.response.data?.error ||
+        error.response.data?.message ||
+        error.message ||
+        null
+      const safeErr = buildSafeError(error.response.status, rawServerError)
+      console.error('Response error:', safeErr.statusCode, safeErr.serverError)
+      return Promise.reject(safeErr)
     }
-    
-    // 处理网络错误
+
+    // Timeout (kein response).
+    if (error.code === 'ECONNABORTED' && error.message?.includes('timeout')) {
+      const safeErr = buildSafeError(408, error.message)
+      console.error('Response error: timeout', safeErr.serverError)
+      return Promise.reject(safeErr)
+    }
+
+    // Netzwerkfehler (kein response, kein Timeout).
     if (error.message === 'Network Error') {
-      console.error('Network error - please check your connection')
+      const safeErr = buildSafeError(null, error.message)
+      safeErr.message = 'Netzwerkfehler — bitte Verbindung prüfen'
+      console.error('Response error: network', safeErr.serverError)
+      return Promise.reject(safeErr)
     }
-    
-    return Promise.reject(error)
+
+    // Unbekannter Fehler ohne response — auf jeden Fall serverError
+    // verstecken und generische Message liefern.
+    const safeErr = buildSafeError(null, error.message)
+    console.error('Response error: unknown', safeErr.serverError)
+    return Promise.reject(safeErr)
   }
 )
 
