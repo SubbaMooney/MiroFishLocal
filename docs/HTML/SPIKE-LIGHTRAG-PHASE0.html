@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spike-Report Phase 0 — LightRAG Mock-Spike — MiroFish</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #58a6ff;
+    --code-bg: #161b22;
+    --border: #30363d;
+    --table-stripe: #161b22;
+    --pass-bg: #1a4a2e;
+    --pass-fg: #a4f0bf;
+    --fail-bg: #5c1a1a;
+    --fail-fg: #ffd1d1;
+    --warn-bg: #5c3a1a;
+    --warn-fg: #ffe1c1;
+    --info-bg: #1a3a4a;
+    --info-fg: #c1ecff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0969da;
+      --code-bg: #f6f8fa;
+      --border: #d0d7de;
+      --table-stripe: #f6f8fa;
+      --pass-bg: #d4f0dd;
+      --pass-fg: #1a5c30;
+      --fail-bg: #ffe5e5;
+      --fail-fg: #8a1c1c;
+      --warn-bg: #ffefd6;
+      --warn-fg: #8a4a00;
+      --info-bg: #ddf4ff;
+      --info-fg: #1a4d6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 980px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; }
+  h2 { margin-top: 2.2em; font-size: 1.45em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+  h3 { margin-top: 1.6em; font-size: 1.15em; }
+  p, li { color: var(--fg); }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1rem 1.1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.88em;
+    line-height: 1.5;
+  }
+  pre code { background: transparent; border: 0; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.94em; }
+  th, td { border: 1px solid var(--border); padding: 0.55em 0.75em; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  blockquote {
+    margin: 1em 0;
+    padding: 0.6em 1em;
+    border-left: 4px solid var(--accent);
+    background: var(--code-bg);
+    color: var(--muted);
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.55em;
+    border-radius: 4px;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge.pass { background: var(--pass-bg); color: var(--pass-fg); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail-fg); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .badge.info { background: var(--info-bg); color: var(--info-fg); }
+  .verdict {
+    display: inline-block;
+    padding: 0.4em 1em;
+    border-radius: 6px;
+    background: var(--pass-bg);
+    color: var(--pass-fg);
+    font-weight: 700;
+    font-size: 1.1em;
+    margin: 0.5em 0;
+  }
+  footer {
+    margin-top: 3em;
+    padding-top: 1em;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+  .mermaid { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1em 0; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Spike-Report — LightRAG Phase 0 (Mock-Spike)</h1>
+<p>Datum: 2026-04-30 · Branch: <code>spike/lightrag-phase0-mock</code> · Worktree-HEAD: <code>df5d74b</code> (Plan-Stand) · LightRAG-Version: <code>1.4.15</code></p>
+<p>Verdikt: <span class="verdict">GREEN</span> — 7 von 7 Annahmen aus dem Migrationsplan validiert ohne einen einzigen echten Bailian-API-Call. Aufwand: ca. 2 h Engineering. Kosten: 0 USD.</p>
+
+<blockquote>WICHTIG: Es gibt einen substantiellen Befund am <code>RagManager</code>-Skeleton aus <code>docs/MIGRATION-ZEP-TO-LIGHTRAG.md</code> Sektion "Code-Skeleton". Dieser ist im Spike-Code bereits korrigiert und muss in den produktiven Code von Phase 1 mit der Korrektur übernommen werden. Details siehe Sektion "Befund am RagManager-Skeleton".</blockquote>
+
+<h2>Was ist ein Mock-Spike?</h2>
+<p>Wir validieren die im Plan definierten kritischen Annahmen, indem wir LightRAG mit voll gemockten LLM- und Embedding-Funktionen laufen lassen. Die Mocks erzeugen deterministische Synthetic-Outputs im Format, das LightRAG erwartet (Entity-Extraction-Records mit Tuple-Delimitern, JSON für Keyword-Extraction, freier String für Query). Es findet kein einziger echter Network-Call statt.</p>
+<p>Der Spike zeigt damit Code-Bereitschaft (Setup, API-Verträge, Threading-Modell, Storage-Persistenz). Er macht keine Aussage über LLM-Cost oder Output-Qualität (siehe Sektion "Cost/Performance — vertagt").</p>
+
+<div class="mermaid">
+flowchart LR
+  A[Spike-Skript] --> B{Mock-Funktionen}
+  B --> C[mock_llm_func\nEntity-Extraction-Format]
+  B --> D[mock_embedding_func\n1024-dim hash-basiert]
+  C --> E[LightRAG 1.4.15]
+  D --> E
+  E --> F[NetworkX + NanoVectorDB\nlokal in working_dir]
+  E --> G[7 Tests A1..A7]
+  G --> H[JSON-Report\n/tmp/spike-report.json]
+  classDef mock fill:#fde2c4,stroke:#a85b00,color:#1f2328;
+  classDef core fill:#cfe9ff,stroke:#0969da,color:#1f2328;
+  class C,D mock;
+  class E,F core;
+</div>
+
+<h2>Mock-Spike — was wurde validiert</h2>
+
+<table>
+  <thead>
+    <tr><th>ID</th><th>Annahme aus dem Plan</th><th>Wie getestet</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>A1</td>
+      <td>Pflicht-Init-Pattern (<code>initialize_storages</code> + <code>initialize_pipeline_status</code>) ohne <code>KeyError: history_messages</code> oder <code>AttributeError: __aenter__</code>.</td>
+      <td>LightRAG-Instanz frisch anlegen, beide Init-Calls, dann <code>ainsert</code> mit Demo-Text. Alles im langlebigen RagManager-Loop, nicht in temporärem <code>asyncio.run</code>.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A2</td>
+      <td>RagManager-Singleton mit dediziertem Event-Loop-Thread und Sync-API funktioniert threadsafe.</td>
+      <td>Zwei sequentielle <code>mgr.insert(...)</code> aus dem Hauptthread, danach <code>mgr.get_all_nodes(...)</code> aus einem zweiten OS-Thread.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A3</td>
+      <td>Multi-Project-Isolation via <code>working_dir</code>. Insert in A bleibt unsichtbar in B.</td>
+      <td>Zwei separate <code>graph_id</code>s mit jeweils eigenem <code>working_dir</code> gleichzeitig betreiben.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A4</td>
+      <td>NetworkX-Graph-Zugriff für strukturierte Reads (für <code>get_all_nodes</code> / <code>get_all_edges</code> Migration).</td>
+      <td><code>rag.chunk_entity_relation_graph.get_all_nodes()</code> und <code>.get_all_edges()</code> als async Calls.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A5</td>
+      <td>Per-Graph <code>asyncio.Lock</code> verhindert NanoVectorDB-Race.</td>
+      <td>4 parallele OS-Threads inserten gleichzeitig in denselben Graph; Lock muss serialisieren.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A6</td>
+      <td>Storage-Persistenz: nach Insert liegt das erwartete File-Layout im <code>working_dir</code>.</td>
+      <td>Files im <code>working_dir</code> listen und gegen erwartetes Pattern prüfen.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+    <tr>
+      <td>A7</td>
+      <td><code>shutil.rmtree(working_dir)</code> als Delete-Pfad ist sauber.</td>
+      <td>Insert, dann <code>mgr.delete(graph_id)</code>, dann prüfen dass Verzeichnis und Manager-Instanz weg sind.</td>
+      <td><span class="badge pass">PASS</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>LLM-Mock-Calls bei kompletter Suite: <strong>24</strong> · Embedding-Mock-Calls: <strong>72</strong> · Wallclock: ca. 0,5 s</p>
+
+<h3>Korrekturhinweise zum Migrationsplan</h3>
+<p>Drei kleine Detail-Korrekturen am Plan, die der Spike aufgedeckt hat:</p>
+<ol>
+  <li><strong>A4 — Plan-Text vs. echte LightRAG-API</strong>: Im Plan steht <code>rag.chunk_entity_relation_graph.nodes()</code> / <code>.edges()</code>. Das ist die direkte NetworkX-Iteration auf dem Graph-Objekt. Der echte Vertrag (<code>BaseGraphStorage</code>-Interface, Implementierung <code>lightrag/kg/networkx_impl.py:511-538</code>) ist async:
+    <pre><code>nodes = await rag.chunk_entity_relation_graph.get_all_nodes()
+edges = await rag.chunk_entity_relation_graph.get_all_edges()</code></pre>
+    Beide liefern <code>list[dict]</code> mit Properties (<code>id</code>, <code>entity_type</code>, <code>description</code>, <code>created_at</code>, <code>file_path</code> bei Knoten; <code>source</code>, <code>target</code>, <code>keywords</code>, <code>description</code> bei Edges). Für die Phase-3-Migration in <code>entity_reader.py</code> muss daher per <code>RagManager</code> gewrappt werden.
+  </li>
+  <li><strong>A6 — File-Endung NanoVectorDB</strong>: Im Plan steht <code>vdb_*.pkl</code>. NanoVectorDB persistiert tatsächlich als JSON: <code>vdb_entities.json</code>, <code>vdb_relationships.json</code>, <code>vdb_chunks.json</code>. Komplettes Layout im <code>working_dir</code> (12 Dateien pro Graph): <code>graph_chunk_entity_relation.graphml</code>, <code>kv_store_doc_status.json</code>, <code>kv_store_full_docs.json</code>, <code>kv_store_text_chunks.json</code>, <code>kv_store_full_entities.json</code>, <code>kv_store_full_relations.json</code>, <code>kv_store_entity_chunks.json</code>, <code>kv_store_relation_chunks.json</code>, <code>kv_store_llm_response_cache.json</code>, <code>vdb_entities.json</code>, <code>vdb_relationships.json</code>, <code>vdb_chunks.json</code>.</li>
+  <li><strong>A1/A2 — Loop-Bindung von <code>initialize_pipeline_status()</code></strong>: siehe nächste Sektion (kritischer Befund).</li>
+</ol>
+
+<h2>Befund am RagManager-Skeleton</h2>
+
+<p>Beim ersten Spike-Run (vor der Korrektur im Test-Code) ist Folgendes passiert: A1 lief in einem <code>asyncio.run(_run())</code>-Loop, A2..A7 liefen anschließend im <code>RagManager</code>-Loop-Thread. Resultat: A2..A7 brachen alle mit folgendem Fehler ab:</p>
+
+<pre><code>RuntimeError: &lt;asyncio.locks.Lock object at 0x...&gt; is bound to a different event loop
+  File "lightrag/kg/shared_storage.py", line 170, in __aenter__
+    await self._lock.acquire()</code></pre>
+
+<p><strong>Root cause</strong>: <code>initialize_pipeline_status()</code> aus <code>lightrag.kg.shared_storage</code> legt einen prozessweiten globalen <code>pipeline_status_lock</code> an und bindet ihn an den <em>aktuellen</em> <code>asyncio</code>-Loop. Der Lock ist Modul-State (über alle LightRAG-Instanzen geteilt). Wird <code>initialize_pipeline_status()</code> zuerst in Loop X aufgerufen und Loop X danach beendet, schlagen alle nachfolgenden LightRAG-Calls aus Loop Y fehl, weil Python-asyncio-Locks fest an ihren Erst-Loop gebunden sind.</p>
+
+<div class="mermaid">
+sequenceDiagram
+  participant H as Hauptthread (asyncio.run)
+  participant SS as shared_storage (Modul-State)
+  participant L as RagManager-Loop-Thread
+  H->>SS: initialize_pipeline_status()
+  SS-->>SS: Lock erzeugt, an Loop H gebunden
+  H->>H: ainsert ok
+  H-->>H: Loop H beendet (asyncio.run kehrt zurück)
+  L->>SS: ainsert versucht Lock zu acquiren
+  SS->>L: RuntimeError: bound to a different event loop
+  Note over L,SS: Globaler Modul-Lock ist tot
+</div>
+
+<h3>Konkrete Konsequenzen für Phase 1</h3>
+<ul>
+  <li>Im <code>RagManager</code>-Skeleton (<code>docs/MIGRATION-ZEP-TO-LIGHTRAG.md</code> Zeile 183-242) ist <code>await initialize_pipeline_status()</code> korrekt im <code>_get_or_create</code>-Coroutine aufgerufen, läuft also automatisch im RagManager-Loop. Das ist im Plan richtig dokumentiert. <strong>Aber</strong>: Wenn jemand in Tests, im Startup, in CLI-Skripten oder in einem REPL <code>await initialize_pipeline_status()</code> im Hauptthread mit eigenem <code>asyncio.run</code> aufruft (z.B. zum Smoke-Test), dann ist der globale Lock danach an den toten Loop gebunden, und der Produktiv-Pfad ist tot.</li>
+  <li>Pflicht-Regel für Phase 1: <em><code>initialize_pipeline_status()</code> darf im gesamten Prozess nur in einem einzigen, langlebigen Event-Loop aufgerufen werden — dem <code>RagManager</code>-Loop.</em> Das gehört in <code>backend/app/services/rag_manager.py</code> als Doc-String und in den Phase-1-PR als Lint-Regel (z.B. via Grep-Check).</li>
+  <li>Empfehlung für die Test-Suite (Phase 1 pytest-Smoke): Der Smoke-Test darf nicht direkt <code>await initialize_pipeline_status()</code> aufrufen, sondern muss über den <code>RagManager</code> gehen. Der Spike-Code zeigt dieses Pattern in <code>test_1_init_pattern(mgr, ...)</code>.</li>
+</ul>
+
+<p>Diese Erkenntnis war ohne Mock-Spike nicht trivial zu sehen — die Doku des LightRAG-Repos warnt zwar vor "Init nicht vergessen" (<code>KeyError: history_messages</code>), aber der Loop-Bindings-Fallstrick taucht in Issues erst bei mehrthread-Setups auf.</p>
+
+<h2>Cost/Performance — vertagt</h2>
+<p>Folgende Punkte aus Phase 0 des Migrationsplans wurden NICHT validiert, weil sie ohne echte API-Calls nicht messbar sind:</p>
+
+<table>
+  <thead>
+    <tr><th>Frage</th><th>Warum vertagt</th><th>Wann nachholbar</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>LLM-Calls pro 10 MB PDF</td><td>Mock-LLM liefert sofort, sagt nichts über echte Bailian-Costs aus</td><td>Sobald <code>LLM_API_KEY</code>/<code>LLM_BASE_URL</code> für Bailian verfügbar</td></tr>
+    <tr><td>Wallclock-Time für Indexierung 10 MB PDF</td><td>Ohne LLM- und Embedding-Latenz nicht aussagekräftig</td><td>siehe oben</td></tr>
+    <tr><td>Output-Qualität von <code>aquery</code></td><td>Mock-LLM gibt fixe Strings zurück</td><td>siehe oben</td></tr>
+    <tr><td>Bailian-Embedding-Kompatibilität (<code>text-embedding-v3</code>, 1024-dim)</td><td>Mock-Embedding ist Hash-basiert, nicht das echte Modell</td><td>sobald <code>EMBED_API_KEY</code> verfügbar</td></tr>
+    <tr><td>Abbruchkriterium "LLM-Calls pro 10 MB &gt; 10.000"</td><td>nicht messbar im Mock</td><td>siehe oben</td></tr>
+    <tr><td>Abbruchkriterium "Wallclock &gt; 30 Min für 10 MB"</td><td>nicht messbar im Mock</td><td>siehe oben</td></tr>
+  </tbody>
+</table>
+
+<p>Schätzung für den Echt-Spike: 1 MB Beispiel-Text ergibt mit Bailian Qwen-3 ungefähr 200-500 LLM-Calls (Entity-Extraction + Merging + Summarization), Kosten ca. 0,02-0,10 USD bei aktuellen Bailian-Tarifen. Wallclock-Schätzung 2-5 Min. Damit lässt sich ein vorsichtiger Echt-Spike als Folgeschritt für ca. 0,05 USD durchführen, ohne sofort die volle 5-10 MB Variante zu fahren.</p>
+
+<h2>RagManager-Skeleton — produktionsreif?</h2>
+<p>Status: produktionsreif für Phase 1, aber mit folgenden Pflichtergänzungen gegenüber dem Plan-Text:</p>
+<ul>
+  <li>Doc-Comment-Block im Modulkopf, der die Loop-Bindung von <code>initialize_pipeline_status()</code> erklärt und das einzig-zulässige Aufrufmuster (über <code>RagManager</code>) festschreibt.</li>
+  <li><code>shutdown()</code>-Methode hinzufügen (im Plan-Skeleton fehlend) — sauberer Stop des Loop-Threads für Tests und für Flask-Reload.</li>
+  <li><code>finalize_storages()</code> der LightRAG-Instanz vor dem <code>shutil.rmtree(...)</code> aufrufen, damit keine offenen Datei-Handles in NanoVectorDB hängen.</li>
+  <li><code>get_all_nodes(graph_id)</code> und <code>get_all_edges(graph_id)</code> als sync-API-Convenience-Wrapper für Phase-3-Caller (<code>entity_reader.py</code>-Migration).</li>
+  <li>Insert-Lock pro Graph (<code>asyncio.Lock</code>) wie im Plan-Skeleton — im Spike validiert (A5).</li>
+</ul>
+<p>Die Singleton-Lifecycle-Frage (wer ruft <code>RagManager.shutdown()</code> in Flask?) ist offen: vermutlich via <code>atexit</code>-Hook in <code>app/__init__.py</code>, analog zur bereits bestehenden <code>SimulationRunner.register_cleanup()</code>-Registrierung. Das ist Phase-1-Engineering-Arbeit, nicht Spike-Scope.</p>
+
+<h2>Was die Mocks wirklich validieren — ehrliche Einschätzung</h2>
+<h3>Repräsentativ und belastbar</h3>
+<ul>
+  <li>Mock-LLM liefert echtes Entity-Extraction-Format (Tuple-Delimiter <code>&lt;|#|&gt;</code>, <code>&lt;|COMPLETE|&gt;</code>-Marker). LightRAG parst das ohne Fehler und legt Knoten und Edges korrekt an. Das stützt: Pflicht-Init, Storage-Persistenz, Multi-Project-Isolation, Per-Graph-Lock, Delete-Pfad, NetworkX-Reads.</li>
+  <li>Mock-Embedding liefert deterministische 1024-dim L2-normalisierte Vektoren. NanoVectorDB akzeptiert sie ohne Dimensions-Fehler und persistiert die Indizes.</li>
+  <li>Threading-Modell (Loop-Thread + <code>run_coroutine_threadsafe</code> + Per-Graph-Lock) ist 1:1 wie im Produktiv-Pfad gemeint und wird unter echtem Multi-Thread-Stress getestet.</li>
+</ul>
+<h3>Fragwürdig — was Mocks NICHT zeigen</h3>
+<ul>
+  <li>Echtes Bailian-Embedding-API-Schema (Body-Format, Auth-Header, Rate-Limits, Token-Window-Limits) — der Mock umgeht das komplett. Vor Phase 2 ist eine Validierung mit <code>text-embedding-v3</code> zwingend.</li>
+  <li>Echte LightRAG-LLM-Prompt-Robustheit gegen Bailian-Output-Drift (Bailian Qwen liefert manchmal Markdown-Wrapper um die Tuple-Records, manchmal verbindet es Records mit Tuple-Delimiter statt Newline — siehe <code>lightrag/operate.py:970-1004</code> mit dem <code>fix_tuple_delimiter_corruption</code>-Workaround). Wie oft der Workaround in der Praxis greift, lässt sich nur mit echten Calls beobachten.</li>
+  <li>Cost-Profile pro Insert-Typ: 24 Mock-LLM-Calls für 9 winzige Inserts ergeben hochgerechnet ca. 200-300 Mock-Calls pro 1 MB Text. Wie sich das auf echte LightRAG-Default-Konfig (<code>max_parallel_insert=4</code>, <code>entity_extract_max_gleaning</code>, etc.) skaliert, ist eine Funktion des echten LLM-Verhaltens.</li>
+  <li>Output-Qualität von <code>aquery</code> ist im Mock-Setup nicht aussagekräftig — der Mock gibt einen Fixed-String zurück.</li>
+</ul>
+
+<h2>Empfehlung für die nächsten Schritte</h2>
+<ol>
+  <li><strong>Sofort</strong>: Mock-Spike-Befunde in den Migrationsplan einarbeiten (3 Korrekturen, siehe oben), v.a. die Loop-Bindings-Pflicht für <code>initialize_pipeline_status()</code>. Kleine Plan-Aktualisierung, kein eigener PR.</li>
+  <li><strong>Vor Phase 1-Start</strong>: Kleiner Echt-Spike mit ca. 1 MB Beispiel-Text aus <code>backend/uploads/</code> und echten Bailian-Keys. Geschätzte Kosten 0,02-0,10 USD. Validiert: Bailian-Embedding-Kompatibilität (<code>text-embedding-v3</code>, 1024-dim), echte LLM-Output-Robustheit, Wallclock-Zeit pro 1 MB. Liefert die fehlenden Zahlen für die Phase-0-Abbruchkriterien (10.000-Calls-Limit, 30-Min-Limit). Das Spike-Skript ist dafür bereits 90 Prozent fertig — nur die zwei Mock-Funktionen werden gegen echte Bailian-Calls (über <code>lightrag.llm.openai.openai_complete_if_cache</code> und <code>openai_embed</code>) ausgetauscht.</li>
+  <li><strong>Nach Echt-Spike grün</strong>: Phase 1 starten (<code>feat(rag): introduce RagManager and migrate graph_builder</code>). Das Spike-Skript-Skeleton kann fast 1:1 nach <code>backend/app/services/rag_manager.py</code> übernommen werden, mit den oben aufgezählten Ergänzungen.</li>
+  <li><strong>Phase 2 ohne weiteren Echt-Spike</strong>: nicht empfohlen. Phase 2 ist die Indexing-Migration, und ohne valide Cost-Daten aus Schritt 2 fliegt Phase 2 blind ins Bailian-LLM-Cost-Risiko (Plan-Risiko Nummer 1 mit Wahrscheinlichkeit "hoch" und Auswirkung "hoch"). Schritt 2 ist Pflicht-Vorbedingung für Phase 2.</li>
+  <li><strong>Risiko Multi-Tenancy parallel</strong>: Issue #2527 im LightRAG-Repo deutet an, dass NanoVectorDB unter <code>working_dir</code>-Isolation und gleichzeitiger Concurrent-Last in seltenen Fällen Datenverlust haben kann. Im Mock-Spike (A3 + A5) keine Auffälligkeit, aber Last-Test mit echten Embeddings im Produktiv-Stack wäre eine Phase-5-Smoke-Test-Erweiterung wert.</li>
+</ol>
+
+<h2>Reproduzierbarkeit — How to run</h2>
+<p>Voraussetzungen: Python 3.13 (Spike läuft auch unter 3.11/3.12, in dieser Session war 3.13.7 verfügbar) und <code>lightrag-hku&gt;=1.4.10,&lt;1.5</code> (Spike validiert auf <code>1.4.15</code>).</p>
+
+<pre><code># Variante mit uv (empfohlen)
+uv venv backend/scripts/.spike-venv
+uv pip install --python backend/scripts/.spike-venv/bin/python "lightrag-hku>=1.4.10,<1.5"
+
+# Variante mit stdlib
+python3 -m venv backend/scripts/.spike-venv
+backend/scripts/.spike-venv/bin/pip install "lightrag-hku>=1.4.10,<1.5"
+
+# Run
+backend/scripts/.spike-venv/bin/python backend/scripts/lightrag_mock_spike.py \
+    --working-dir-base /tmp/lightrag_spike \
+    --report-json /tmp/spike-report.json</code></pre>
+
+<p>Erwarteter Exit-Code: 0 bei VERDICT=GREEN, 0 bei YELLOW (≥5 PASS), 1 bei RED.</p>
+
+<h3>Bei Setup-Fehlschlag</h3>
+<ul>
+  <li>Python-Version per <code>python3 --version</code> prüfen, ggf. <code>pyenv local 3.12.x</code>.</li>
+  <li><code>uv pip install --reinstall --no-cache "lightrag-hku>=1.4.10,<1.5"</code> als Reset.</li>
+  <li>Bei Apple-Silicon mit <code>numpy>=2.x</code> und <code>nano-vectordb</code>-ABI-Mismatch: Wheels-Cache leeren und neu installieren.</li>
+</ul>
+
+<p>In dieser Session wurde das venv per stdlib <code>python -m venv</code> angelegt, weil die Sandbox-Konfig <code>uv venv</code> blockiert hat. Beide Varianten sind funktional äquivalent.</p>
+
+<h2>Anhang: Test-Run JSON-Report</h2>
+<p>Der vollständige JSON-Report aus dem Spike-Run liegt unter <code>/tmp/spike-report.json</code>. Auszug der wichtigsten Felder:</p>
+
+<pre><code>{
+  "spike": "lightrag-mock-spike",
+  "lightrag_version": "1.4.15",
+  "duration_s": 0.5,
+  "llm_calls_total": 24,
+  "embedding_calls_total": 72,
+  "verdict": "GREEN",
+  "results": [
+    {"name": "A1: Pflicht-Init-Pattern", "status": "PASS"},
+    {"name": "A2: RagManager Sync→Async-Bridge", "status": "PASS"},
+    {"name": "A3: Multi-Project-Isolation", "status": "PASS"},
+    {"name": "A4: NetworkX-Graph-Reads", "status": "PASS"},
+    {"name": "A5: Per-Graph asyncio.Lock", "status": "PASS"},
+    {"name": "A6: Storage-Persistenz", "status": "PASS"},
+    {"name": "A7: Delete-Pfad shutil.rmtree", "status": "PASS"}
+  ]
+}</code></pre>
+
+<h2>Verweise</h2>
+<ul>
+  <li>Migrationsplan: <a href="./MIGRATION-ZEP-TO-LIGHTRAG.html">Migration Zep → LightRAG (HTML)</a> · Quelle: <code>docs/MIGRATION-ZEP-TO-LIGHTRAG.md</code></li>
+  <li>Spike-Skript: <code>backend/scripts/lightrag_mock_spike.py</code></li>
+  <li>LightRAG Source-Refs: <code>lightrag/lightrag.py:706</code> (chunk_entity_relation_graph Init), <code>lightrag/kg/networkx_impl.py:511-538</code> (get_all_nodes/get_all_edges), <code>lightrag/kg/shared_storage.py:170</code> (Lock-Stelle des Loop-Bindings-Bugs).</li>
+  <li>Issue zur Multi-Tenancy: <a href="https://github.com/HKUDS/LightRAG/issues/2527">HKUDS/LightRAG#2527</a></li>
+</ul>
+
+<footer>
+  Auto-generiert parallel zu <code>docs/SPIKE-LIGHTRAG-PHASE0.md</code> · Mermaid v11 für Diagramme · Layout passt sich an Light/Dark-Mode an.
+</footer>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
+</script>
+
+</body>
+</html>
