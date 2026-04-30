@@ -1,29 +1,38 @@
 FROM python:3.11
 
-# 安装 Node.js （满足 >=18）及必要工具
+# Security-Hardening (SECURITY-AUDIT C7):
+# Dedizierter Non-Root-User, damit ein RCE im Container nicht direkt root erhält.
+RUN groupadd -r mirofish \
+  && useradd -r -g mirofish -m -d /home/mirofish -s /bin/bash mirofish
+
+# Node.js (>=18) und benoetigte Tools installieren
 RUN apt-get update \
   && apt-get install -y --no-install-recommends nodejs npm \
   && rm -rf /var/lib/apt/lists/*
 
-# 从 uv 官方镜像复制 uv
+# uv aus offiziellem Astral-Image kopieren
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
 WORKDIR /app
+RUN chown -R mirofish:mirofish /app
 
-# 先复制依赖描述文件以利用缓存
-COPY package.json package-lock.json ./
-COPY frontend/package.json frontend/package-lock.json ./frontend/
-COPY backend/pyproject.toml backend/uv.lock ./backend/
+# Ab hier laeuft alles unprivilegiert
+USER mirofish
 
-# 安装依赖（Node + Python）
+# Dependency-Manifeste fuer besseres Layer-Caching
+COPY --chown=mirofish:mirofish package.json package-lock.json ./
+COPY --chown=mirofish:mirofish frontend/package.json frontend/package-lock.json ./frontend/
+COPY --chown=mirofish:mirofish backend/pyproject.toml backend/uv.lock ./backend/
+
+# Abhaengigkeiten (Node + Python) installieren
 RUN npm ci \
   && npm ci --prefix frontend \
   && cd backend && uv sync --frozen
 
-# 复制项目源码
-COPY . .
+# Restlichen Quellcode kopieren
+COPY --chown=mirofish:mirofish . .
 
 EXPOSE 3000 5001
 
-# 同时启动前后端（开发模式）
+# Frontend + Backend im Dev-Modus starten
 CMD ["npm", "run", "dev"]
