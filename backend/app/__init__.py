@@ -14,6 +14,7 @@ from flask_cors import CORS
 
 from .config import Config
 from .utils.logger import setup_logger, get_logger
+from .utils.error_response import format_error_response
 
 
 def create_app(config_class=Config):
@@ -67,6 +68,18 @@ def create_app(config_class=Config):
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
+
+    # Globaler Error-Handler: fängt jede unerwartete Exception ab und
+    # liefert eine einheitliche, im Produktivmodus stacktrace-freie
+    # JSON-Antwort mit Request-ID. HTTPException (z. B. 404) wird hier
+    # weitergereicht, damit Flask seine Standard-Behandlung übernimmt.
+    from werkzeug.exceptions import HTTPException
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_exception(exc):
+        if isinstance(exc, HTTPException):
+            return exc
+        return format_error_response(exc)
     
     # 健康检查
     @app.route('/health')
