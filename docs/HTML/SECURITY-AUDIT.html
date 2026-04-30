@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Security-Audit — MiroFish</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #58a6ff;
+    --code-bg: #161b22;
+    --border: #30363d;
+    --table-stripe: #161b22;
+    --crit-bg: #5c1a1a;
+    --crit-fg: #ffd1d1;
+    --high-bg: #5c3a1a;
+    --high-fg: #ffe1c1;
+    --med-bg: #4a4a1a;
+    --med-fg: #fff7c1;
+    --low-bg: #1a3a4a;
+    --low-fg: #c1ecff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0969da;
+      --code-bg: #f6f8fa;
+      --border: #d0d7de;
+      --table-stripe: #f6f8fa;
+      --crit-bg: #ffe5e5;
+      --crit-fg: #8a1c1c;
+      --high-bg: #ffefd6;
+      --high-fg: #8a4a00;
+      --med-bg: #fff8c5;
+      --med-fg: #6e5b00;
+      --low-bg: #ddf4ff;
+      --low-fg: #1a4d6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 1080px;
+    margin: 2rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1, h2, h3, h4 { line-height: 1.25; }
+  h1 { border-bottom: 1px solid var(--border); padding-bottom: .3em; font-size: 2em; }
+  h2 { border-bottom: 1px solid var(--border); padding-bottom: .3em; margin-top: 2.4em; font-size: 1.55em; }
+  h3 { margin-top: 1.8em; font-size: 1.25em; }
+  h4 { margin-top: 1.4em; font-size: 1.05em; }
+  p, li { color: var(--fg); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd, samp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: transparent; padding: 0; }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--code-bg);
+    color: var(--fg);
+    margin: 1em 0;
+    padding: 0.6em 1em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.93em;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  thead { background: var(--code-bg); }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+  .mermaid { text-align: center; margin: 1.5em 0; }
+  .topbar {
+    background: var(--code-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1.5rem;
+    font-size: 0.9em;
+    color: var(--muted);
+  }
+  .topbar a { margin-right: 1rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.1em 0.55em;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.78em;
+    margin-right: 0.4em;
+    letter-spacing: 0.04em;
+  }
+  .badge-crit { background: var(--crit-bg); color: var(--crit-fg); }
+  .badge-high { background: var(--high-bg); color: var(--high-fg); }
+  .badge-med  { background: var(--med-bg);  color: var(--med-fg); }
+  .badge-low  { background: var(--low-bg);  color: var(--low-fg); }
+  .finding {
+    border-left: 3px solid var(--border);
+    padding: 0.4em 1em 0.6em;
+    margin: 1em 0 1.4em;
+  }
+  .finding.crit { border-color: #d83a3a; }
+  .finding.high { border-color: #d8893a; }
+  .summary-callout {
+    background: var(--crit-bg);
+    color: var(--crit-fg);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 1em 0 1.5em;
+    font-weight: 600;
+  }
+  .toc {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8em 1.2em;
+    font-size: 0.95em;
+  }
+  .toc ol { margin: 0.4em 0 0 1.2em; padding: 0; }
+  .toc li { margin: 0.15em 0; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="./index.html">Index</a>
+  <a href="./CLAUDE.html">CLAUDE.md</a>
+  <span>MiroFish · Security-Audit · 2026-04-30</span>
+</div>
+
+<main>
+
+<h1>Security-Audit — MiroFish</h1>
+
+<p>Datum: 2026-04-30 · Branch: <code>main</code> · Audit-Stand: <code>4e7aace</code><br/>
+Methodik: Read-only statische Analyse. Drei parallele Audit-Agents, Ergebnisse dedupliziert.</p>
+
+<div class="toc">
+<strong>Inhalt</strong>
+<ol>
+  <li><a href="#summary">Executive Summary</a></li>
+  <li><a href="#egress">Was NICHT lokal läuft (Egress-Inventur)</a></li>
+  <li><a href="#vulns">Vulnerabilities (Severity-sortiert)</a></li>
+  <li><a href="#owasp">OWASP Top 10 Ampel</a></li>
+  <li><a href="#priorities">Top-10-Fix-Reihenfolge</a></li>
+  <li><a href="#quickwin">5-Minuten-Quickwins</a></li>
+</ol>
+</div>
+
+<h2 id="summary">Executive Summary</h2>
+
+<div class="summary-callout">
+Wäre dieses System aktuell deploybar in einer öffentlichen Umgebung? — NEIN.
+</div>
+
+<p>Sieben CRITICAL- und neun HIGH-Findings. Bereits drei davon allein (kein Auth + <code>DEBUG=True</code> Default + Wildcard-CORS) bedeuten Remote Code Execution durch jeden anonymen Internet-Nutzer. Hinzu kommen Stored XSS im Frontend, Path-Traversal in mehreren ID-basierten Endpunkten und ein Container, der als root läuft.</p>
+
+<p><strong>Sicher betreibbar nur als rein lokale Single-User-Anwendung mit Loopback-Bind und Firewall-Block externer Interfaces.</strong></p>
+
+<h2 id="egress">Was NICHT lokal läuft (Egress-Inventur)</h2>
+
+<h3>Backend-Runtime — der laufende Server sendet Daten an</h3>
+
+<table>
+  <thead><tr>
+    <th>#</th><th>Dienst</th><th>Default-Host</th><th>Zweck</th><th>Was wird gesendet</th><th>Auth</th><th>Konfig</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>1</td>
+      <td>LLM-Provider (OpenAI-SDK-Format)</td>
+      <td><code>https://dashscope.aliyuncs.com/compatible-mode/v1</code> (Alibaba Bailian/Qwen); Fallback <code>https://api.openai.com/v1</code></td>
+      <td>LLM-Inferenz für Text-Processing, Ontology, Profile, Report-Agent</td>
+      <td>System-Prompts, <strong>vollständige Seed-PDF/MD/TXT-Inhalte in Chunks</strong>, Persona-Beschreibungen, Tool-Call-Argumente</td>
+      <td>Bearer Token aus <code>LLM_API_KEY</code></td>
+      <td>3 ENV-Vars</td>
+    </tr>
+    <tr><td>2</td>
+      <td>Zep Cloud</td>
+      <td><code>https://api.getzep.com</code> (SDK-Default, <strong>nicht</strong> überschreibbar)</td>
+      <td>GraphRAG Memory: Episoden, Entities, Edges, Search</td>
+      <td><strong>Vollständiger User-Seed-Inhalt als Episoden</strong>, Graph-IDs, Search-Queries</td>
+      <td>Bearer Token aus <code>ZEP_API_KEY</code></td>
+      <td>nur API-Key per ENV</td>
+    </tr>
+    <tr><td>3</td>
+      <td>Boost-LLM (optional)</td>
+      <td>beliebiger Host aus <code>LLM_BOOST_BASE_URL</code></td>
+      <td>Speed-kritischer Pfad in Parallel-Simulation</td>
+      <td>Agenten-Aktionen, Round-Decisions</td>
+      <td><code>LLM_BOOST_API_KEY</code></td>
+      <td>optional, 3 ENV-Vars</td>
+    </tr>
+    <tr><td>4</td>
+      <td>LLM-Provider (camel-ai in Workern)</td>
+      <td>wie #1, gesetzt via <code>os.environ['OPENAI_API_KEY']</code> global</td>
+      <td>Pro-Agent-Inferenz in Twitter-/Reddit-Workern</td>
+      <td>Persona-Prompts, simulierte Timelines, Aktion-Choices</td>
+      <td>wie #1</td>
+      <td>wie #1</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Aufrufstellen: <code>backend/app/utils/llm_client.py:30-33,64</code>, <code>backend/app/services/zep_*.py</code>, <code>backend/app/services/oasis_profile_generator.py:18,196-208</code>, <code>backend/scripts/run_*_simulation.py:119,422-455</code>.</p>
+
+<h3>Build- / Install-Time-Egress</h3>
+
+<table>
+  <thead><tr><th>Dienst</th><th>Zweck</th><th>Aufrufstelle</th></tr></thead>
+  <tbody>
+    <tr><td><code>docker.io/python:3.11</code></td><td>Base-Image</td><td><code>Dockerfile:1</code></td></tr>
+    <tr><td><code>ghcr.io/astral-sh/uv:0.9.26</code></td><td>uv-Binary</td><td><code>Dockerfile:9</code></td></tr>
+    <tr><td>Debian APT Mirrors</td><td><code>nodejs npm</code></td><td><code>Dockerfile:4-6</code></td></tr>
+    <tr><td><code>npmjs.com</code></td><td><code>npm ci</code> (Root + Frontend)</td><td><code>Dockerfile:19-20</code></td></tr>
+    <tr><td><code>pypi.org</code> / <code>files.pythonhosted.org</code></td><td><code>uv sync --frozen</code> (100+ Pakete)</td><td><code>Dockerfile:21</code>, <code>backend/uv.lock</code></td></tr>
+    <tr><td><code>ghcr.io/666ghj/mirofish:latest</code></td><td>Production-Image-Pull</td><td><code>docker-compose.yml:3</code></td></tr>
+    <tr><td>GitHub Actions Marketplace</td><td>CI-Build (<code>actions/*</code>, <code>docker/*</code>)</td><td><code>.github/workflows/docker-image.yml</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Frontend-Browser-Egress</h3>
+
+<table>
+  <thead><tr><th>Dienst</th><th>Zweck</th><th>Aufrufstelle</th></tr></thead>
+  <tbody>
+    <tr><td><code>fonts.googleapis.com</code> + <code>fonts.gstatic.com</code></td><td>Vier Webfont-Familien</td><td><code>frontend/index.html:5-7</code></td></tr>
+    <tr><td><code>localhost:5001</code></td><td>Backend-API (lokal, via Vite-Proxy)</td><td><code>frontend/src/api/index.js:6</code>, <code>vite.config.js:18-22</code></td></tr>
+    <tr><td><code>cdn.jsdelivr.net/npm/mermaid@11/...</code></td><td>Mermaid-Renderer für die HTML-Doku</td><td><code>docs/HTML/CLAUDE.html</code>, <code>docs/HTML/SECURITY-AUDIT.html</code></td></tr>
+  </tbody>
+</table>
+
+<p><strong>Keine Telemetry, keine Analytics-Pakete im Frontend.</strong></p>
+
+<h3>Datenfluss-Diagramm</h3>
+
+<div class="mermaid">
+flowchart LR
+  User["User Browser"] -->|"Upload<br/>PDF / MD / TXT"| Backend["Flask Backend<br/>localhost:5001"]
+  User -.->|Webfonts| GFonts["fonts.googleapis.com"]
+  User -.->|"Mermaid CDN<br/>(nur Doku)"| JsDelivr["cdn.jsdelivr.net"]
+
+  Backend -->|"Voller Seed-Inhalt<br/>als Prompts"| LLM["Alibaba Bailian / OpenAI<br/>via LLM_BASE_URL"]
+  Backend -->|"Voller Seed-Inhalt<br/>als Episoden"| Zep["Zep Cloud<br/>api.getzep.com"]
+
+  Backend -->|spawnt| Workers["Twitter / Reddit Worker<br/>Subprozesse lokal"]
+  Workers -->|"Pro-Agent-Calls<br/>via OPENAI_API_KEY env"| LLM
+  Workers -.->|optional| BoostLLM["Boost-LLM<br/>LLM_BOOST_*"]
+
+  classDef ext fill:#fee,stroke:#c33,stroke-width:2px,color:#600;
+  classDef local fill:#efe,stroke:#3c3,stroke-width:2px,color:#040;
+  class LLM,Zep,BoostLLM,GFonts,JsDelivr ext;
+  class Backend,Workers,User local;
+</div>
+
+<p><strong>Klartext</strong>: Jede hochgeladene PDF wird <strong>vollständig in Chunks</strong> an einen externen LLM-Provider und parallel <strong>vollständig</strong> an Zep Cloud gesendet. Es gibt keinen Content-Filter, kein PII-Stripping, keinen Opt-Out.</p>
+
+<h2 id="vulns">Vulnerabilities (konsolidiert, Severity-sortiert)</h2>
+
+<h3><span class="badge badge-crit">CRITICAL</span></h3>
+
+<div class="finding crit">
+<h4>C1 — Komplettes Fehlen von Authentifizierung und Autorisierung</h4>
+<p><code>backend/app/__init__.py:43,66-69</code></p>
+<p>Sämtliche <code>/api/graph/*</code>, <code>/api/simulation/*</code>, <code>/api/report/*</code> Endpunkte ohne Auth. Jeder anonyme Aufrufer kann Projekte erstellen/löschen, Graphen löschen (<code>graph.py:597</code>), Simulationen starten/stoppen (<code>simulation.py:1451,1644</code>), Berichte löschen (<code>report.py:444</code>), Subprozesse spawnen, Zep-Daten leaken.</p>
+<p><strong>Fix</strong>: Auth-Middleware (Flask-Login + API-Key/JWT) im <code>before_request</code>-Hook; Resource-Ownership via <code>project_id</code>-Scoping prüfen.</p>
+</div>
+
+<div class="finding crit">
+<h4>C2 — Werkzeug-Debugger-RCE durch Default <code>FLASK_DEBUG=True</code> + <code>0.0.0.0</code>-Binding</h4>
+<p><code>backend/app/config.py:71</code> + <code>backend/run.py:42-46</code></p>
+<pre><code>DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+host = os.environ.get('FLASK_HOST', '0.0.0.0')
+app.run(host=host, port=port, debug=debug, threaded=True)</code></pre>
+<p>Default = Debug-an + Bind auf alle Interfaces. Jede uncaught Exception spawnt die interaktive Werkzeug-Debugger-Konsole, die beliebigen Python-Code auf jeder Stack-Frame ausführen kann. PIN-Bypass in Containern oft trivial (PIN basiert auf Username + MAC + machine-id).</p>
+<p><strong>Repro</strong>: 500er triggern, Browser auf <code>http://&lt;host&gt;:5001/console</code> → Python-Konsole als Container-User.</p>
+<p><strong>Fix</strong>: <code>DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'</code>. In <code>run.py</code> Hard-Refusal: <code>if Config.DEBUG and host == '0.0.0.0': sys.exit(...)</code>.</p>
+</div>
+
+<div class="finding crit">
+<h4>C3 — Wildcard-CORS auf zustands-ändernden Endpunkten</h4>
+<p><code>backend/app/__init__.py:43</code></p>
+<pre><code>CORS(app, resources={r"/api/*": {"origins": "*"}})</code></pre>
+<p>Jede Webseite, die der User parallel im Browser hat, kann <code>POST</code>/<code>DELETE</code>-Requests gegen die API schicken. In Verbindung mit C1: vollständige Daten-Exfiltration und -Vernichtung möglich.</p>
+<p><strong>Fix</strong>: <code>CORS_ORIGINS</code> als ENV mit konkreter Frontend-Domain-Whitelist.</p>
+</div>
+
+<div class="finding crit">
+<h4>C4 — Hardcoded <code>SECRET_KEY</code>-Fallback</h4>
+<p><code>backend/app/config.py:70</code></p>
+<pre><code>SECRET_KEY = os.environ.get('SECRET_KEY', 'mirofish-secret-key')</code></pre>
+<p>Bei fehlender ENV läuft Flask mit öffentlich bekanntem Schlüssel. Sobald CSRF-Tokens oder Session-Cookies eingeführt werden, sind sie für jede MiroFish-Instanz weltweit fälschbar.</p>
+<p><strong>Fix</strong>: Default entfernen, in <code>Config.validate()</code> als Pflicht prüfen.</p>
+</div>
+
+<div class="finding crit">
+<h4>C5 — Stacktrace-Leak in jeder Fehlerantwort</h4>
+<p>Praktisch jede Route in <code>backend/app/api/{graph,simulation,report}.py</code> antwortet bei Exception:</p>
+<pre><code>return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500</code></pre>
+<p>Leak-Inhalte: absolute Server-Pfade, Modul-Layout, Library-Versionen, in seltenen Frames LLM-Prompt-Inhalte oder API-Keys.</p>
+<p><strong>Fix</strong>: Globaler <code>@app.errorhandler(Exception)</code> mit Request-ID, Tracebacks nur ins Log.</p>
+</div>
+
+<div class="finding crit">
+<h4>C6 — Path-Traversal in mehreren ID-basierten Endpunkten</h4>
+<p>Keine einzige der ID-basierten Pfade validiert das Format.</p>
+<table>
+  <thead><tr><th>Route</th><th>Datei:Zeile</th><th>Schaden</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/simulation/&lt;id&gt;/posts</code></td><td><code>simulation.py:2004-2010</code></td><td>Liest beliebige <code>*.db</code> aus FS</td></tr>
+    <tr><td><code>GET /api/simulation/&lt;id&gt;/comments</code></td><td><code>simulation.py:2080-2085</code></td><td>identisch</td></tr>
+    <tr><td><code>GET /api/simulation/&lt;id&gt;/config/download</code></td><td><code>simulation.py:1299-1300</code></td><td>Liest beliebige Config</td></tr>
+    <tr><td><code>DELETE /api/graph/project/&lt;id&gt;</code></td><td><code>models/project.py:113-115,222-237</code></td><td><code>shutil.rmtree</code> mit Traversal — <strong>kann Repo-Verzeichnisse löschen</strong></td></tr>
+    <tr><td><code>GET /api/report/&lt;id&gt;/section/&lt;int&gt;</code></td><td><code>services/report_agent.py:1913</code></td><td>Liest beliebige <code>.md</code></td></tr>
+    <tr><td><code>POST /api/simulation/start</code></td><td><code>services/simulation_runner.py:438-448</code></td><td><code>subprocess.Popen</code> mit User-kontrolliertem <code>--config</code></td></tr>
+  </tbody>
+</table>
+<p><strong>Fix</strong> — zentrale Validator-Util mit Regex <code>^(proj|sim|report|task)_[a-f0-9]{8,32}$</code> plus <code>os.path.realpath</code>-Check gegen erlaubtes Root.</p>
+</div>
+
+<div class="finding crit">
+<h4>C7 — Docker-Container läuft als root + bindet <code>0.0.0.0</code> ohne Schutz</h4>
+<p><code>Dockerfile:1</code> (<code>FROM python:3.11</code> ohne <code>USER</code>) + <code>docker-compose.yml:1-13</code> (kein <code>cap_drop</code>, <code>read_only</code>, <code>security_opt</code>, <code>user</code>).</p>
+<p>In Kombination mit C2-Debugger-RCE: <strong>root im Container</strong> mit Schreibzugriff auf gemountetes Repo-Verzeichnis (Persistenz über Container-Restart).</p>
+<p><strong>Fix</strong>:</p>
+<pre><code># Dockerfile
+RUN useradd -m -u 1000 mirofish &amp;&amp; chown -R mirofish:mirofish /app
+USER mirofish
+
+# docker-compose.yml
+ports:
+  - "127.0.0.1:5001:5001"
+  - "127.0.0.1:3000:3000"
+cap_drop: [ALL]
+security_opt: [no-new-privileges:true]</code></pre>
+</div>
+
+<h3><span class="badge badge-high">HIGH</span></h3>
+
+<div class="finding high">
+<h4>H1 — Stored XSS via LLM/User-Content im Custom-Markdown-Renderer</h4>
+<p><code>frontend/src/components/Step4Report.vue:1874-1909</code> + <code>Step5Interaction.vue:557-595</code></p>
+<p><strong>Kein HTML-Escape vor der Markdown-Transformation.</strong> <code>&lt;script&gt;</code>, <code>&lt;img onerror&gt;</code>, <code>&lt;svg onload&gt;</code> aus LLM-/Persona-Output landen via <code>v-html</code> 1:1 im DOM. Quellen: Report-Agent-Ausgabe, Chat-Nachrichten, Interview-Antworten.</p>
+<p><strong>Fix</strong>: <code>marked</code> + <code>DOMPurify</code>:</p>
+<pre><code>import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content || ''))</code></pre>
+</div>
+
+<div class="finding high">
+<h4>H2 — Prompt-Injection im LLM-Tool-Loop</h4>
+<p><code>backend/app/services/report_agent.py:1067-1112,1166-1180</code></p>
+<p><code>_parse_tool_calls</code> extrahiert per Regex und ruft <code>_execute_tool</code> direkt mit Modell-gelieferten Parametern. <code>simulation_requirement</code> (User-Input) ist sowohl in System- als auch User-Prompt eingebettet. Angreifer kann Tool-Calls erzwingen mit frei wählbaren Queries gegen Zep-Graphen anderer Projekte und Cost-Inflation via LLM-Logs.</p>
+<p><strong>Fix</strong>: Tool-Call-Allow-List inkl. Parameter-Sanitization; <code>simulation_id</code>/<code>graph_id</code> ausschließlich vom Server gesetzt; Output-Filter zwischen Tool-Antwort und nächstem LLM-Turn.</p>
+</div>
+
+<div class="finding high">
+<h4>H3 — Cross-Tenant-Zugriff auf Graphen, Simulationen, Reports</h4>
+<p><code>backend/app/api/graph.py:569-622</code>, <code>simulation.py:2004+</code>, <code>report.py:444</code></p>
+<p>Keine Owner-Prüfung. <code>GET /data/&lt;graph_id&gt;</code> und <code>DELETE /delete/&lt;graph_id&gt;</code> lesen/löschen jeden Graphen, dessen ID man errät oder via <code>/list</code> enumeriert.</p>
+<p><strong>Fix</strong>: Server-seitige ACL + Authz-Decorator vor jedem Zugriff.</p>
+</div>
+
+<div class="finding high">
+<h4>H4 — <code>chat_history</code>-Injection im Report-Chat</h4>
+<p><code>backend/app/api/report.py:472-564</code></p>
+<p>Client schickt <code>chat_history</code> direkt mit. Client kann eigene <code>assistant</code>-Rolle mit <code>&lt;tool_call&gt;</code> einschleusen und so Tools auslösen — ohne Auth, ohne Schema-Validierung.</p>
+<p><strong>Fix</strong>: <code>chat_history</code> server-seitig aus persistenter Session laden, niemals vom Client <code>assistant</code>-Messages akzeptieren.</p>
+</div>
+
+<div class="finding high">
+<h4>H5 — Unkontrollierter Subprozess-Spawn ohne Quota</h4>
+<p><code>backend/app/services/simulation_runner.py:438-448</code></p>
+<p>Jeder <code>POST /api/simulation/start</code> startet <code>subprocess.Popen([python, script, ...])</code> mit <code>start_new_session=True</code>. Ohne Auth ist das DoS- und Crypto-Mining-Vektor.</p>
+<p><strong>Fix</strong>: Pflicht-Auth + Per-User-Concurrency-Limit + Resource-Limits (cgroups, RLIMIT_CPU, RLIMIT_AS).</p>
+</div>
+
+<div class="finding high">
+<h4>H6 — Keine Rate-Limits auf teure LLM-/Subprozess-Endpunkte</h4>
+<p>Endpunkte ohne Rate-Limit: <code>POST /api/graph/ontology/generate</code>, <code>/build</code>, <code>/api/report/generate</code>, <code>/chat</code>, <code>/api/simulation/interview/*</code>, <code>/start</code>. Anonymer Loop erschöpft API-Budget (<code>LLM_API_KEY</code>/Zep) und CPU.</p>
+<p><strong>Fix</strong>: <code>flask-limiter</code> mit Per-IP- und Per-User-Quota; Token-Budget-Counter.</p>
+</div>
+
+<div class="finding high">
+<h4>H7 — PDF-Bombe / kein PyMuPDF-Limit</h4>
+<p><code>backend/app/utils/file_parser.py:97-111</code></p>
+<p><code>fitz.open(file_path)</code> öffnet PDF, alle Seiten in Speicher. Kein Page-Limit, kein Decoded-Size-Limit. 50 MB komprimierte PDF mit Millionen Seiten → OOM.</p>
+<p><strong>Fix</strong>: <code>doc.page_count &gt; 500</code> abbrechen + kumulative Textlänge cappen.</p>
+</div>
+
+<div class="finding high">
+<h4>H8 — Tempfile-Leak im Report-Download</h4>
+<p><code>backend/app/api/report.py:417-427</code></p>
+<p><code>tempfile.NamedTemporaryFile(delete=False)</code> wird nie gelöscht. <code>/tmp</code> füllt sich, sensible Inhalte verbleiben.</p>
+<p><strong>Fix</strong>: <code>Response(report.markdown_content, mimetype='text/markdown')</code> direkt streamen statt Tempfile.</p>
+</div>
+
+<div class="finding high">
+<h4>H9 — <code>SELECT *</code> aus User-DB ungefiltert an Client</h4>
+<p><code>backend/app/api/simulation.py:2029-2035,2103-2116</code></p>
+<p>Bei Schema-Änderungen in OASIS leaken interne Felder. <code>content</code> ist LLM-generiert und fließt direkt in den XSS-anfälligen Renderer (H1).</p>
+<p><strong>Fix</strong>: Explizite Spaltenauswahl + Length-Cap pro Feld.</p>
+</div>
+
+<h3><span class="badge badge-med">MEDIUM</span></h3>
+
+<table>
+  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th></tr></thead>
+  <tbody>
+    <tr><td>M1</td><td><code>original_filename</code> ohne <code>secure_filename()</code> gespeichert</td><td><code>models/project.py:241-269</code></td></tr>
+    <tr><td>M2</td><td><code>backend/uploads/</code> + <code>backend/logs/</code> nicht in <code>.gitignore</code></td><td><code>.gitignore</code></td></tr>
+    <tr><td>M3</td><td>Request-Bodies werden im DEBUG-Modus komplett geloggt — PII auf Disk</td><td><code>__init__.py:52-57</code></td></tr>
+    <tr><td>M4</td><td>Frontend leitet rohe Server-Errors via <code>Promise.reject(new Error(res.error))</code> in UI weiter</td><td><code>frontend/src/api/index.js:32-34</code></td></tr>
+    <tr><td>M5</td><td>Missing Security Headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)</td><td>global; <code>flask-talisman</code></td></tr>
+    <tr><td>M6</td><td>JSON-Schema-Validierung fehlt überall</td><td><code>report.py:498-516</code>, <code>simulation.py:2194-2200</code></td></tr>
+    <tr><td>M7</td><td>Locale-State über Modul-Globals statt <code>ContextVar</code></td><td><code>utils/locale.py</code></td></tr>
+    <tr><td>M8</td><td>Kein server-seitiger HTML-Sanitizer auf Markdown-Output</td><td><code>report_agent.py:1707,2479-2493</code></td></tr>
+    <tr><td>M9</td><td>CSRF-Schutz fehlt komplett</td><td>global</td></tr>
+    <tr><td>M10</td><td>Worker-Subprozesse erben <code>os.environ.copy()</code> — alle Secrets fließen weiter</td><td><code>simulation_runner.py:432-447</code></td></tr>
+  </tbody>
+</table>
+
+<h3><span class="badge badge-low">LOW / INFO</span></h3>
+
+<table>
+  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th></tr></thead>
+  <tbody>
+    <tr><td>L1</td><td>Kein expliziter Timeout auf OpenAI-Client (Default 600 s)</td><td><code>utils/llm_client.py:30-33</code></td></tr>
+    <tr><td>L2</td><td>Kein expliziter Timeout auf Zep-Client</td><td><code>services/zep_*.py</code></td></tr>
+    <tr><td>L3</td><td><code>as_attachment=True</code> ohne <code>mimetype</code></td><td><code>report.py:423,429</code></td></tr>
+    <tr><td>L4</td><td><code>health</code> Endpoint enthüllt Service-Name → Recon-Hilfe</td><td><code>__init__.py:72-74</code></td></tr>
+    <tr><td>L5</td><td><code>int()</code> Casting ohne Bounds</td><td><code>report.py:799,881</code></td></tr>
+    <tr><td>L6</td><td>UUID-only Filename ohne Magic-Number-Check</td><td><code>models/project.py:256-262</code></td></tr>
+    <tr><td>L7</td><td>AGPL-3.0 Network-Service-Klausel — Source-Download-Link sollte im Frontend-Footer stehen</td><td><code>LICENSE</code></td></tr>
+    <tr><td>L8</td><td>Mermaid-CDN <code>cdn.jsdelivr.net</code> in lokaler HTML-Doku → bricht bei Air-Gap</td><td><code>docs/HTML/*.html</code></td></tr>
+    <tr><td>L9</td><td><code>OPENAI_API_KEY</code> wird in Worker global per <code>os.environ[...]</code> gesetzt</td><td><code>scripts/run_*_simulation.py:442,448</code></td></tr>
+    <tr><td>L10</td><td>Vite-Dev-Proxy hat <code>secure: false</code></td><td><code>frontend/vite.config.js:21</code></td></tr>
+    <tr><td>INFO</td><td>IPC <code>simulation_ipc.py</code> nutzt nur <code>json.load</code>/<code>json.dump</code> — kein Pickle</td><td>—</td></tr>
+    <tr><td>INFO</td><td>Git-History sauber: keine <code>sk-…</code>-Strings, keine getrackte <code>.env</code></td><td>—</td></tr>
+    <tr><td>INFO</td><td>Dependencies current: Flask 3.1.2, Werkzeug 3.1.4, openai 1.109.1, PyMuPDF 1.26.7, Vue 3.5.x — keine offenen kritischen CVEs</td><td><code>uv.lock</code>, <code>package.json</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="owasp">OWASP Top 10 Ampel</h2>
+
+<table>
+  <thead><tr><th>Kategorie</th><th>Status</th><th>Findings</th></tr></thead>
+  <tbody>
+    <tr><td>A01 Broken Access Control</td><td><span class="badge badge-crit">FAIL</span></td><td>C1, C6, H3, H4, M9</td></tr>
+    <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-crit">FAIL</span></td><td>C4</td></tr>
+    <tr><td>A03 Injection</td><td><span class="badge badge-crit">FAIL</span></td><td>H1, H2, H4, M6, M8</td></tr>
+    <tr><td>A04 Insecure Design</td><td><span class="badge badge-crit">FAIL</span></td><td>C1, H5, H6, H7, M6</td></tr>
+    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-crit">FAIL</span></td><td>C2, C3, C5, C7, M3, M5, L1–L4</td></tr>
+    <tr><td>A06 Vulnerable Components</td><td><span class="badge badge-low">OK</span></td><td><code>pip-audit</code> + <code>npm audit</code> in CI empfohlen</td></tr>
+    <tr><td>A07 Auth Failures</td><td><span class="badge badge-crit">FAIL</span></td><td>C1</td></tr>
+    <tr><td>A08 Software &amp; Data Integrity</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M10, L6</td></tr>
+    <tr><td>A09 Logging &amp; Monitoring</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M3</td></tr>
+    <tr><td>A10 SSRF</td><td><span class="badge badge-low">OK</span></td><td>Keine User-URL wird vom Server abgerufen</td></tr>
+  </tbody>
+</table>
+
+<h2 id="priorities">Top-10-Fix-Reihenfolge</h2>
+
+<ol>
+  <li><strong>C2</strong> — <code>FLASK_DEBUG</code> Default auf <code>False</code>. Eine Zeile, eliminiert RCE-Risiko sofort.</li>
+  <li><strong>C7</strong> — Docker non-root + Loopback-Bind. Verteidigung in Tiefe.</li>
+  <li><strong>C6</strong> — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden.</li>
+  <li><strong>C3</strong> — CORS auf Whitelist beschränken.</li>
+  <li><strong>H1</strong> — <code>marked</code> + <code>DOMPurify</code> im Frontend, alle <code>v-html</code>/<code>innerHTML</code>-Stellen umstellen.</li>
+  <li><strong>C5</strong> — Globaler <code>errorhandler</code>, alle <code>traceback.format_exc()</code> aus Responses entfernen.</li>
+  <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>).</li>
+  <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>.</li>
+  <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>.</li>
+  <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig.</li>
+</ol>
+
+<h2 id="quickwin">Was du sofort tun kannst (5 Minuten, hoher Impact)</h2>
+
+<pre><code># 1. .env: Debug ausschalten
+echo "FLASK_DEBUG=False" &gt;&gt; .env
+echo "SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')" &gt;&gt; .env
+
+# 2. Docker-Compose: Loopback-Bind
+# In docker-compose.yml:
+#   ports:
+#     - "127.0.0.1:5001:5001"
+#     - "127.0.0.1:3000:3000"
+
+# 3. .gitignore ergänzen
+echo "backend/uploads/" &gt;&gt; .gitignore
+echo "backend/logs/" &gt;&gt; .gitignore</code></pre>
+
+<p>Damit sind C2 (RCE-Risiko entschärft) + C7 (kein externer Netzzugang) + M2 (kein versehentlicher Upload-Commit) sofort weg. Die übrigen Findings brauchen Code-Änderungen.</p>
+
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: isDark ? "dark" : "default",
+    securityLevel: "loose",
+    flowchart: { htmlLabels: true, curve: "basis" }
+  });
+</script>
+
+</body>
+</html>
