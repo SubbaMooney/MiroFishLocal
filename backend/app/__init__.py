@@ -15,6 +15,7 @@ from flask_cors import CORS
 from .config import Config
 from .utils.logger import setup_logger, get_logger
 from .utils.error_response import format_error_response
+from .utils.log_masking import mask_sensitive_fields
 
 
 def create_app(config_class=Config):
@@ -55,7 +56,11 @@ def create_app(config_class=Config):
         logger = get_logger('mirofish.request')
         logger.debug(f"请求: {request.method} {request.path}")
         if request.content_type and 'json' in request.content_type:
-            logger.debug(f"请求体: {request.get_json(silent=True)}")
+            # PII-Masking: API-Keys, Tokens, Passwörter etc. werden vor
+            # dem Logging durch '***' ersetzt. Die Original-Payload bleibt
+            # für die Route unverändert (mask_sensitive_fields kopiert).
+            body = request.get_json(silent=True)
+            logger.debug(f"请求体: {mask_sensitive_fields(body)}")
     
     @app.after_request
     def log_response(response):
