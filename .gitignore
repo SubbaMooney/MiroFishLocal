@@ -41,6 +41,11 @@ yarn-error.log*
 .coverage
 htmlcov/
 
+# Spike / Phase 0 — isoliertes Venv und Artefakte für LightRAG-Mock-Spike
+# (siehe docs/SPIKE-LIGHTRAG-PHASE0.md)
+backend/scripts/.spike-venv/
+backend/scripts/.spike-artifacts/
+
 # Cursor
 .cursor/
 .claude/
