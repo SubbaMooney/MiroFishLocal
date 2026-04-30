@@ -54,12 +54,19 @@ backend/scripts/.spike-artifacts/
 mydoc/
 mytest/
 
-# 日志文件
-backend/logs/
+# Logfiles
 *.log
 
-# 上传文件
-backend/uploads/
-
-# Docker 数据
+# Docker-Daten
 data/
+
+# ----------------------------------------------------------------------------
+# Security (SECURITY-AUDIT M2):
+# User-PDFs, Logfiles und PII duerfen niemals versehentlich committed werden.
+# Daher explizit Upload-/Log-Verzeichnisse blocken — sowohl auf dem aktuellen
+# Pfad backend/* als auch rekursiv, falls Module spaeter umstrukturiert werden.
+# ----------------------------------------------------------------------------
+backend/uploads/
+backend/logs/
+**/uploads/
+**/logs/

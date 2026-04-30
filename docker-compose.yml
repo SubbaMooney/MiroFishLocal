@@ -1,14 +1,24 @@
 services:
   mirofish:
     image: ghcr.io/666ghj/mirofish:latest
-    # 加速镜像（如拉取缓慢可替换上方地址）
+    # Beschleunigtes Mirror-Image (falls Pull langsam ist):
     # image: ghcr.nju.edu.cn/666ghj/mirofish:latest
     container_name: mirofish
     env_file:
       - .env
+    # Security-Hardening (SECURITY-AUDIT C7):
+    # Ports nur auf Loopback binden, damit MiroFish nicht ueber das LAN/WAN
+    # exponiert wird. Wer Remote-Zugriff braucht, muss bewusst einen
+    # Reverse-Proxy/Tunnel davor setzen.
     ports:
-      - "3000:3000"
-      - "5001:5001"
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:5001:5001"
+    # Linux-Capabilities komplett droppen (Defense-in-Depth)
+    cap_drop:
+      - ALL
+    # Verhindert Privilege-Escalation via setuid/setgid Binaries
+    security_opt:
+      - "no-new-privileges:true"
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/backend/uploads
