@@ -297,6 +297,16 @@ flowchart TB
   </tbody>
 </table>
 
+<h2 id="korrekturen">Korrekturen aus Mock-Spike (Phase 0, 2026-04-30)</h2>
+
+<p>Drei Anpassungen an der obigen Mapping-Tabelle und am Code-Skeleton, die der Mock-Spike (siehe <a href="./SPIKE-LIGHTRAG-PHASE0.html">Spike-Report</a>) aufgedeckt hat:</p>
+
+<ol>
+  <li><strong>Loop-Bindung von <code>initialize_pipeline_status()</code></strong> — kritisch, Pflicht-Invariante für Phase 1. Der prozessweite Lock, den diese Funktion erzeugt, ist an den <strong>aktuellen Event-Loop</strong> gebunden. Wenn parallel ein anderer Loop entsteht (z.B. via separates <code>asyncio.run</code> in einem Smoke-Test oder einem Caller), schlagen alle nachfolgenden LightRAG-Calls aus dem anderen Loop fehl mit <code>RuntimeError: Lock is bound to a different event loop</code>. Konsequenz: ALLE Calls — Init, Insert, Query — müssen über den langlebigen <code>RagManager._loop</code> laufen, niemals außerhalb.</li>
+  <li><strong>NetworkX-Methoden sind async</strong>: <code>chunk_entity_relation_graph.get_node(...)</code>, <code>.get_node_edges(...)</code>, <code>.nodes()</code>, <code>.edges()</code> und verwandte Methoden sind in lightrag-hku 1.4.15 durchgehend Coroutinen. Die Mapping-Tabelle ist konzeptionell korrekt, aber alle konkreten Aufrufe brauchen <code>await</code>. Konkrete Aufrufform siehe <code>backend/scripts/lightrag_mock_spike.py</code>.</li>
+  <li><strong>NanoVectorDB persistiert in <code>.json</code>, nicht <code>.pkl</code></strong> — nur Doku-Korrektur; relevant falls Backup/Migration-Doku entsteht.</li>
+</ol>
+
 <h2 id="phasen">Phasen-Plan</h2>
 
 <div class="phase">

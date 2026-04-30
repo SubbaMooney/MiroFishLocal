@@ -60,6 +60,17 @@ flowchart TB
 | `client.graph.edge.get_by_graph_id(...)` | `zep_paging.py:123` (5 Caller) | `list(rag.chunk_entity_relation_graph.edges())` (NetworkX) | trivial |
 | `client.graph.delete(graph_id)` | `graph_builder.py:505` | `shutil.rmtree(working_dir)` | trivial |
 
+## Korrekturen aus Mock-Spike (Phase 0, 2026-04-30)
+
+Drei Anpassungen an der obigen Mapping-Tabelle und am Code-Skeleton, die der Mock-Spike (siehe `docs/SPIKE-LIGHTRAG-PHASE0.md`) aufgedeckt hat:
+
+1. **Loop-Bindung von `initialize_pipeline_status()`** — kritisch, Pflicht-Invariante für Phase 1.
+   Der prozessweite Lock, den diese Funktion erzeugt, ist an den **aktuellen Event-Loop** gebunden. Wenn parallel ein anderer Loop entsteht (z.B. via separates `asyncio.run` in einem Smoke-Test oder einem Caller), schlagen alle nachfolgenden LightRAG-Calls aus dem anderen Loop fehl mit `RuntimeError: Lock is bound to a different event loop`. Konsequenz: ALLE Calls — Init, Insert, Query — müssen über den langlebigen `RagManager._loop` laufen, niemals außerhalb. Im Code-Skeleton unten als Pflicht-Kommentar verankert.
+
+2. **NetworkX-Methoden sind async**: `chunk_entity_relation_graph.get_node(...)`, `.get_node_edges(...)`, `.nodes()`, `.edges()` und verwandte Methoden sind in lightrag-hku 1.4.15 durchgehend Coroutinen. Die Mapping-Tabelle ist konzeptionell korrekt, aber alle konkreten Aufrufe brauchen `await`. Konkrete Aufrufform siehe `backend/scripts/lightrag_mock_spike.py` (zeigt den getesteten RagManager-Wrapper mit `get_all_nodes`/`get_all_edges`).
+
+3. **NanoVectorDB persistiert in `.json`, nicht `.pkl`** — nur Doku-Korrektur; relevant falls Backup/Migration-Doku entsteht.
+
 ## Phasen-Plan
 
 ### Phase 0 — Spike & Risiko-Validierung (1 Tag)
@@ -244,6 +255,7 @@ class RagManager:
 Wichtige Punkte:
 - **Pro Graph ein `asyncio.Lock`** verhindert die Threadsafety-Issue von NanoVectorDB bei concurrent writes.
 - **Ein Event-Loop-Thread** für die ganze App — Loop läuft in eigenem Thread, alle Flask-Requests reichen Coroutinen via `run_coroutine_threadsafe` rein. Sauberer als `nest_asyncio`.
+- **Pflicht-Invariante (aus Mock-Spike)**: ALLE LightRAG-Calls müssen über `self._run(...)` laufen, niemals via `asyncio.run(...)` außerhalb. `initialize_pipeline_status()` bindet einen Lock an den aktuellen Event-Loop — ein zweiter Loop bricht alles. Smoke-Tests im selben Prozess dürfen keinen separaten Loop spawnen.
 - **Insert-Timeout 600 s** wegen Indexierungs-Dauer; Query-Timeout 120 s reicht.
 
 ## Risiken & Mitigation
@@ -256,7 +268,7 @@ Wichtige Punkte:
 | Live-Memory-Updates während Simulation zu teuer | hoch | mittel | Option A (defensiv) als Default, B/C als opt-in |
 | NanoVectorDB nicht threadsafe | sicher | mittel | Per-Graph `asyncio.Lock` im RagManager |
 | Multi-Project-Isolation fehlerhaft | mittel | hoch | Phase 5 Smoke-Test explizit verifizieren, getrennte Working-Dirs |
-| Pflicht-Init vergessen (`initialize_pipeline_status`) | hoch | hoch | Im RagManager als einziger Init-Pfad, nicht außerhalb erlaubt |
+| Pflicht-Init vergessen oder Loop-Bindung verletzt (`initialize_pipeline_status`) | hoch | hoch | Im RagManager als einziger Init-Pfad. ALLE Calls über `_run`, niemals via separates `asyncio.run` — sonst `RuntimeError: Lock is bound to a different event loop` (verifiziert im Mock-Spike) |
 | Bailian-API-Rate-Limits beim Concurrent-Indexing | mittel | mittel | `llm_model_max_async` auf konservative Werte (4) setzen |
 | Migration-Pfad zwischen Storage-Backends fehlt | niedrig | niedrig | Default-Stack (JSON+NetworkX+NanoVectorDB) bewusst wählen, später nicht wechseln |
 | `lightrag-hku` v1.5 noch RC | niedrig | niedrig | Bei v1.4.10 stable bleiben, Upgrade nach Release prüfen |
