@@ -67,8 +67,11 @@ class Config:
     """Flask配置类"""
 
     # Flask配置
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'mirofish-secret-key')
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    # SECRET_KEY MUSS aus der Umgebung kommen — kein Default-Fallback,
+    # damit ein produktiver Start ohne explizit gesetzten Schlüssel scheitert (C4).
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    # FLASK_DEBUG defaultet auf False — Werkzeug-Debugger erlaubt sonst RCE (C2).
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
@@ -123,6 +126,10 @@ class Config:
     def validate(cls):
         """验证必要配置"""
         errors = []
+        if not cls.SECRET_KEY:
+            errors.append(
+                "SECRET_KEY 未配置 (Pflichtfeld, kein Default mehr — bitte in .env setzen)"
+            )
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
         if not cls.ZEP_API_KEY:
