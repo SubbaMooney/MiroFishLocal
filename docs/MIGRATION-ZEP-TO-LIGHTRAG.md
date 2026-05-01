@@ -7,7 +7,7 @@ Ziel: Externe Daten-Senke "Zep Cloud" durch lokal lauffähiges **LightRAG** (`li
 ## TL;DR
 
 - **Aufwand**: 8-9 Engineer-Tage in 6 Phasen
-- **Hauptrisiko**: LLM-Call-Volumen während Indexierung (50 MB PDF kann tausende Bailian-Calls erzeugen)
+- **Hauptrisiko**: LLM-Call-Volumen während Indexierung (50 MB PDF kann tausende LLM-Calls erzeugen)
 - **Architektur-Bruch**: LightRAG gibt **generierten Text** zurück, Zep gab **strukturierte Knoten/Edges**. Caller-Code (besonders `report_agent.py`) muss substantiell umgeschrieben werden.
 - **Empfehlung**: Phase 0 (Spike mit echter Beispiel-PDF) **vor** allem anderen — entscheidet, ob LLM-Cost und Performance akzeptabel sind.
 
@@ -81,7 +81,7 @@ Schritte:
 1. `backend/scripts/lightrag_spike.py` mit minimalem Beispiel anlegen (Pip-Install, kleine Test-PDF, ein `ainsert`, ein `aquery`).
 2. Echte Beispiel-Seed-PDF aus `backend/uploads/` (5-10 MB) durch LightRAG schicken und LLM-Calls zählen + Wallclock-Time messen.
 3. Output qualitativ prüfen: liefert `aquery(mode="local")` brauchbare Inhalte, die der Report-Agent als Tool-Antwort verarbeiten kann?
-4. Bailian-Embedding-API mit `text-embedding-v3` testen (1024-dim).
+4. Embedding-API des konfigurierten Providers testen (Default: 1024-dim, OpenAI-SDK-kompatibel).
 
 Abbruchkriterien:
 - LLM-Calls pro 10 MB PDF > 10.000 → Migration nicht wirtschaftlich vertretbar.
@@ -269,7 +269,7 @@ Wichtige Punkte:
 | NanoVectorDB nicht threadsafe | sicher | mittel | Per-Graph `asyncio.Lock` im RagManager |
 | Multi-Project-Isolation fehlerhaft | mittel | hoch | Phase 5 Smoke-Test explizit verifizieren, getrennte Working-Dirs |
 | Pflicht-Init vergessen oder Loop-Bindung verletzt (`initialize_pipeline_status`) | hoch | hoch | Im RagManager als einziger Init-Pfad. ALLE Calls über `_run`, niemals via separates `asyncio.run` — sonst `RuntimeError: Lock is bound to a different event loop` (verifiziert im Mock-Spike) |
-| Bailian-API-Rate-Limits beim Concurrent-Indexing | mittel | mittel | `llm_model_max_async` auf konservative Werte (4) setzen |
+| LLM-Provider-Rate-Limits beim Concurrent-Indexing | mittel | mittel | `llm_model_max_async` auf konservative Werte (4) setzen |
 | Migration-Pfad zwischen Storage-Backends fehlt | niedrig | niedrig | Default-Stack (JSON+NetworkX+NanoVectorDB) bewusst wählen, später nicht wechseln |
 | `lightrag-hku` v1.5 noch RC | niedrig | niedrig | Bei v1.4.10 stable bleiben, Upgrade nach Release prüfen |
 

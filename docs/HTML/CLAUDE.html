@@ -140,7 +140,7 @@ docker compose up -d
 <table>
   <thead><tr><th>Variable</th><th>Pflicht</th><th>Zweck</th></tr></thead>
   <tbody>
-    <tr><td><code>LLM_API_KEY</code> / <code>LLM_BASE_URL</code> / <code>LLM_MODEL_NAME</code></td><td>ja</td><td>Haupt-LLM (OpenAI-SDK-Format, default Qwen via Bailian)</td></tr>
+    <tr><td><code>LLM_API_KEY</code> / <code>LLM_BASE_URL</code> / <code>LLM_MODEL_NAME</code></td><td>ja</td><td>Haupt-LLM, beliebiger OpenAI-SDK-kompatibler Endpoint (provider-agnostisch)</td></tr>
     <tr><td><code>ZEP_API_KEY</code></td><td>ja</td><td>Zep Cloud Memory Graph</td></tr>
     <tr><td><code>LLM_BOOST_*</code></td><td>optional</td><td>„Boost“-LLM für Speed-kritische Calls — <strong>wenn ungenutzt, Variablen ganz entfernen, nicht leer lassen</strong></td></tr>
     <tr><td><code>FLASK_HOST</code> / <code>FLASK_PORT</code> / <code>FLASK_DEBUG</code></td><td>optional</td><td>Server-Binding (Default <code>0.0.0.0:5001</code>, Debug an)</td></tr>

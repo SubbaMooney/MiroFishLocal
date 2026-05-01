@@ -1,27 +1,29 @@
 """
-LightRAG Echt-Spike — Phase 0.5 mit echten Bailian-Calls + Cost-Cap
+LightRAG Echt-Spike — Phase 0.5 mit echten LLM-Calls + Cost-Cap
 
 Validiert die im Mock-Spike (`lightrag_mock_spike.py`) vertagten Cost/Quality-
 Fragen aus `docs/MIGRATION-ZEP-TO-LIGHTRAG.md` Phase 0:
   - LLM-Call-Volumen pro KB Input (Hochrechnung auf 10 MB Abbruchkriterium)
   - Wallclock-Time für Insert + Query
-  - Bailian-Embedding-Format (text-embedding-v3, 1024-dim, L2-normiert)
+  - Embedding-Format (Vektor-Dim, L2-normiert)
   - LLM-Output-Format-Kompatibilitaet mit LightRAG-Erwartungen
 
 Architektur uebernommen aus dem Mock-Spike: RagManager-Singleton mit dediziertem
 Event-Loop-Thread, sync->async Bridge, per-Graph asyncio.Lock. Einziger
-Unterschied: `llm_model_func` und `embedding_func` rufen echte Bailian-Endpoints
-(OpenAI-SDK-kompatibel via `LLM_BASE_URL`).
+Unterschied: `llm_model_func` und `embedding_func` rufen echte LLM-/Embedding-
+Endpoints (OpenAI-SDK-kompatibel via `LLM_BASE_URL` / `EMBED_BASE_URL`).
 
 Cost-Cap-Guard:
   - Vor jedem API-Call wird der projizierte zusaetzliche Spend geprueft.
   - Standard-Cap: 0.05 USD pro Spike-Run.
-  - Verhalten bei Ueberschreitung: siehe `CostTracker.check_or_fail`.
+  - Verhalten bei Ueberschreitung: HARD-FAIL (siehe `CostTracker.check_or_fail`).
 
 Aufruf:
     PYTHONPATH=/path/to/lightrag-libs python3 backend/scripts/lightrag_real_spike.py \\
         [--cost-cap-usd 0.05] [--test-corpus path/to/small.txt] \\
-        [--working-dir-base /tmp/lightrag_real_spike] [--keep-artifacts]
+        [--embed-dim 1024] \\
+        [--working-dir-base /tmp/lightrag_real_spike] [--keep-artifacts] \\
+        [--price-llm-in 0.0008] [--price-llm-out 0.0020] [--price-embed 0.0001]
 
 Voraussetzungen:
   - .env im Repo-Root mit gueltigen LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME.
@@ -61,14 +63,17 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Bailian-Pricing (USD pro 1k Tokens) — Stand 2026, konservativ geschaetzt.
-# Quelle: https://help.aliyun.com/zh/dashscope/billing (manuell auf USD bei
-# Wechselkurs ~7 CNY/USD umgerechnet). Werte ueber CLI ueberschreibbar.
+# LLM-Pricing-Defaults (USD pro 1k Tokens) — provider-agnostisch.
+# Diese Werte sind PLATZHALTER. Setze sie via CLI auf die tatsaechlichen
+# Tarife deines LLM-Providers. Beispiele (NICHT empfohlen, nur Format-Referenz):
+#   - mid-tier Cloud-LLM:   in 0.0008 / out 0.0020 / embed 0.0001
+#   - high-tier Cloud-LLM:  in 0.0030 / out 0.0150 / embed 0.0001
+#   - lokales LLM (Ollama): 0.0 / 0.0 / 0.0
 # ---------------------------------------------------------------------------
 
-DEFAULT_PRICE_LLM_INPUT_PER_1K_USD = 0.0008    # qwen-plus input
-DEFAULT_PRICE_LLM_OUTPUT_PER_1K_USD = 0.0020   # qwen-plus output
-DEFAULT_PRICE_EMBED_PER_1K_USD = 0.0001        # text-embedding-v3
+DEFAULT_PRICE_LLM_INPUT_PER_1K_USD = 0.0008
+DEFAULT_PRICE_LLM_OUTPUT_PER_1K_USD = 0.0020
+DEFAULT_PRICE_EMBED_PER_1K_USD = 0.0001
 
 
 class CostCapExceeded(RuntimeError):
@@ -80,7 +85,7 @@ class CostTracker:
     """Cumulative Token- und Cost-Tracking mit hartem Cap.
 
     Thread-safe: alle Schreibzugriffe ueber _lock. Der Cost-Cap wird VOR jedem
-    Call geprueft (preflight), nicht erst nach dem Call — damit kein Bailian-
+    Call geprueft (preflight), nicht erst nach dem Call — damit kein LLM-
     Call abgesetzt wird, der das Cap reissen wuerde.
     """
 
@@ -108,9 +113,9 @@ class CostTracker:
     def check_or_fail(self, projected_extra_usd: float, label: str) -> None:
         """Cost-Cap-Policy: HARD-FAIL.
 
-        Preflight vor jedem Bailian-Call. Wuerde der projizierte Spend das Cap
+        Preflight vor jedem LLM-Call. Wuerde der projizierte Spend das Cap
         ueberschreiten, wird CostCapExceeded geworfen — die Tests fangen das ab
-        und markieren betroffene Schritte als SKIPPED. Kein Bailian-Request
+        und markieren betroffene Schritte als SKIPPED. Kein LLM-Request
         verlaesst den Prozess, sobald das Cap gerissen wird.
         """
         with self._lock:
@@ -188,13 +193,13 @@ def resolve_config(env_path: Path) -> dict[str, str]:
     cfg = {
         "LLM_API_KEY": merged.get("LLM_API_KEY", "").strip(),
         "LLM_BASE_URL": merged.get("LLM_BASE_URL", "").strip(),
-        "LLM_MODEL_NAME": merged.get("LLM_MODEL_NAME", "qwen-plus").strip(),
+        "LLM_MODEL_NAME": merged.get("LLM_MODEL_NAME", "").strip(),
     }
     cfg["EMBED_API_KEY"] = merged.get("EMBED_API_KEY", cfg["LLM_API_KEY"]).strip()
     cfg["EMBED_BASE_URL"] = merged.get("EMBED_BASE_URL", cfg["LLM_BASE_URL"]).strip()
-    cfg["EMBED_MODEL_NAME"] = merged.get("EMBED_MODEL_NAME", "text-embedding-v3").strip()
+    cfg["EMBED_MODEL_NAME"] = merged.get("EMBED_MODEL_NAME", "").strip()
 
-    missing = [k for k in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL_NAME") if not cfg[k]]
+    missing = [k for k in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL_NAME", "EMBED_MODEL_NAME") if not cfg[k]]
     if missing:
         raise SystemExit(
             f"[FATAL] Pflicht-Variablen fehlen in .env oder Umgebung: {missing}. "
@@ -204,16 +209,17 @@ def resolve_config(env_path: Path) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Echte Bailian-LLM-Func + Embedding-Func (mit Cost-Cap-Guard)
+# Echte LLM-Func + Embedding-Func (mit Cost-Cap-Guard)
 # ---------------------------------------------------------------------------
 
 
 def make_real_llm_func(client: OpenAI, model: str, tracker: CostTracker) -> Callable:
-    """Liefert eine async LLM-Func mit Bailian-OpenAI-SDK-Aufruf.
+    """Liefert eine async LLM-Func via OpenAI-SDK-kompatiblem Endpoint.
 
-    Token-Schaetzung fuer Preflight: chars/4 als grobe Heuristik (Qwen-Tokenizer
-    weicht ab, aber innerhalb 30%). Tatsaechliche Tokens werden post-call aus
-    `usage` gelesen und korrigiert ins Tracking eingebucht.
+    Token-Schaetzung fuer Preflight: chars/4 als grobe Heuristik (provider-/
+    model-spezifische Tokenizer weichen ab, aber innerhalb ~30%). Tatsaechliche
+    Tokens werden post-call aus `usage` gelesen und korrigiert ins Tracking
+    eingebucht.
     """
 
     async def _llm(
@@ -257,7 +263,7 @@ def make_real_llm_func(client: OpenAI, model: str, tracker: CostTracker) -> Call
 
 
 def make_real_embedding_func(client: OpenAI, model: str, dim: int, tracker: CostTracker) -> EmbeddingFunc:
-    """Bailian-Embeddings via OpenAI-SDK. Liefert EmbeddingFunc mit dim/max_tokens."""
+    """Embeddings via OpenAI-SDK-kompatiblem Endpoint. Liefert EmbeddingFunc mit dim/max_tokens."""
 
     async def _embed(texts: list[str]) -> np.ndarray:
         est_tokens = max(1, sum(len(t) for t in texts) // 4)
@@ -390,7 +396,7 @@ def _record(results: list[TestResult], name: str, status: str, detail: str, t0: 
 
 
 def test_embedding_format(client: OpenAI, model: str, dim: int, tracker: CostTracker) -> TestResult:
-    """T1: Bailian-Embedding liefert (n, dim) float32, naeherungsweise L2-normiert."""
+    """T1: Embedding-API liefert (n, dim) float32, naeherungsweise L2-normiert."""
     t0 = time.perf_counter()
     name = "T1: Embedding-Format"
     try:
@@ -413,7 +419,7 @@ def test_embedding_format(client: OpenAI, model: str, dim: int, tracker: CostTra
 
 
 def test_llm_roundtrip(client: OpenAI, model: str, tracker: CostTracker) -> TestResult:
-    """T2: Bailian-LLM antwortet auf einfachen Prompt mit nicht-leerem String."""
+    """T2: LLM-LLM antwortet auf einfachen Prompt mit nicht-leerem String."""
     t0 = time.perf_counter()
     name = "T2: LLM-Roundtrip"
     try:
@@ -478,17 +484,17 @@ def test_mini_query(mgr: RagManager, tracker: CostTracker) -> TestResult:
 # ---------------------------------------------------------------------------
 
 
-def run_all(cfg: dict[str, str], working_dir_base: Path, corpus: str, tracker: CostTracker, keep_artifacts: bool) -> dict:
+def run_all(cfg: dict[str, str], working_dir_base: Path, corpus: str, tracker: CostTracker, keep_artifacts: bool, embed_dim: int = 1024) -> dict:
     llm_client = OpenAI(api_key=cfg["LLM_API_KEY"], base_url=cfg["LLM_BASE_URL"])
     embed_client = OpenAI(api_key=cfg["EMBED_API_KEY"], base_url=cfg["EMBED_BASE_URL"])
 
     results: list[TestResult] = []
 
-    results.append(test_embedding_format(embed_client, cfg["EMBED_MODEL_NAME"], 1024, tracker))
+    results.append(test_embedding_format(embed_client, cfg["EMBED_MODEL_NAME"], embed_dim, tracker))
     results.append(test_llm_roundtrip(llm_client, cfg["LLM_MODEL_NAME"], tracker))
 
     llm_func = make_real_llm_func(llm_client, cfg["LLM_MODEL_NAME"], tracker)
-    embed_func = make_real_embedding_func(embed_client, cfg["EMBED_MODEL_NAME"], 1024, tracker)
+    embed_func = make_real_embedding_func(embed_client, cfg["EMBED_MODEL_NAME"], embed_dim, tracker)
     mgr = RagManager(working_dir_base, llm_func, embed_func)
     try:
         results.append(test_mini_insert(mgr, corpus, tracker))
@@ -521,11 +527,12 @@ def _verdict(results: list[TestResult]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="LightRAG Echt-Spike (Bailian + Cost-Cap)")
+    parser = argparse.ArgumentParser(description="LightRAG Echt-Spike (provider-agnostisch + Cost-Cap)")
     parser.add_argument("--cost-cap-usd", type=float, default=0.05, help="Hartes Cost-Cap (default: 0.05 USD)")
     parser.add_argument("--working-dir-base", type=Path, default=Path("/tmp/lightrag_real_spike"))
     parser.add_argument("--test-corpus", type=Path, default=None, help="Optional: Pfad zu .txt-Korpus")
     parser.add_argument("--env-file", type=Path, default=Path(".env"), help="Pfad zur .env (default: ./.env)")
+    parser.add_argument("--embed-dim", type=int, default=1024, help="Erwartete Embedding-Dimension (default: 1024)")
     parser.add_argument("--keep-artifacts", action="store_true")
     parser.add_argument("--price-llm-in", type=float, default=DEFAULT_PRICE_LLM_INPUT_PER_1K_USD)
     parser.add_argument("--price-llm-out", type=float, default=DEFAULT_PRICE_LLM_OUTPUT_PER_1K_USD)
@@ -552,7 +559,7 @@ def main() -> int:
     )
 
     args.working_dir_base.mkdir(parents=True, exist_ok=True)
-    report = run_all(cfg, args.working_dir_base, corpus, tracker, args.keep_artifacts)
+    report = run_all(cfg, args.working_dir_base, corpus, tracker, args.keep_artifacts, args.embed_dim)
 
     report_path = args.working_dir_base / "spike_report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")

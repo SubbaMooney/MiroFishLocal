@@ -115,12 +115,12 @@ cp .env.example .env
 **Required Environment Variables:**
 
 ```env
-# LLM API Configuration (supports any LLM API with OpenAI SDK format)
-# Recommended: Alibaba Qwen-plus model via Bailian Platform: https://bailian.console.aliyun.com/
-# High consumption, try simulations with fewer than 40 rounds first
+# LLM API Configuration (any OpenAI-SDK-compatible endpoint works)
+# MiroFish is provider-agnostic; pick the LLM provider of your choice.
+# High consumption, try simulations with fewer than 40 rounds first.
 LLM_API_KEY=your_api_key
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MODEL_NAME=qwen-plus
+LLM_BASE_URL=<your_llm_base_url>
+LLM_MODEL_NAME=<your_model_name>
 
 # Zep Cloud Configuration
 # Free monthly quota is sufficient for simple usage: https://app.getzep.com/

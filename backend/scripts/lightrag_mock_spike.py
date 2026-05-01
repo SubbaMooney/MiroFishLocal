@@ -2,7 +2,7 @@
 LightRAG Mock-Spike — Phase 0 Code-Bereitschaft
 
 Validiert die im Migrationsplan (docs/MIGRATION-ZEP-TO-LIGHTRAG.md) definierten
-sieben kritischen Annahmen, **ohne echte Bailian-API-Calls**. LLM- und Embedding-
+sieben kritischen Annahmen, **ohne echte LLM-API-Calls**. LLM- und Embedding-
 Funktionen sind vollständig gemockt (deterministische Synthetic-Outputs).
 
 Was hier validiert wird (siehe Report):
@@ -18,7 +18,7 @@ Was NICHT validiert wird (siehe Report-Sektion "Cost/Performance — vertagt"):
   - LLM-Call-Volumen pro MB Input
   - Wallclock-Time für Indexierung
   - Output-Qualität von aquery
-  - Bailian-Embedding-Kompatibilität (text-embedding-v3, 1024-dim)
+  - Embedding-Kompatibilität des realen Providers (Default 1024-dim, OpenAI-SDK-Format)
 
 Aufruf:
     PYTHONPATH=/tmp/spike-libs python3 backend/scripts/lightrag_mock_spike.py \\
@@ -166,7 +166,7 @@ async def _mock_embedding_inner(texts: list[str]) -> np.ndarray:
         seed = int.from_bytes(seed_bytes, "little", signed=False)
         rng = np.random.default_rng(seed)
         vec = rng.standard_normal(1024).astype(np.float32)
-        # L2-normalisieren (typisch für Bailian-Embedding-Outputs).
+        # L2-normalisieren (typisch für Embedding-API-Outputs).
         norm = float(np.linalg.norm(vec))
         if norm > 0:
             vec /= norm

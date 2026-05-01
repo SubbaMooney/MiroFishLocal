@@ -2,7 +2,7 @@
 
 Datum: 2026-04-30 - Branch: `spike/lightrag-phase0-mock` - Worktree-HEAD: `df5d74b` (Plan-Stand) - LightRAG-Version: `1.4.15`
 
-Verdikt: GREEN. 7 von 7 Annahmen aus dem Migrationsplan validiert ohne einen einzigen echten Bailian-API-Call. Aufwand: ca. 2 h Engineering. Kosten: 0 USD.
+Verdikt: GREEN. 7 von 7 Annahmen aus dem Migrationsplan validiert ohne einen einzigen echten LLM-API-Call. Aufwand: ca. 2 h Engineering. Kosten: 0 USD.
 
 WICHTIG: Es gibt einen substantiellen Befund am `RagManager`-Skeleton aus `docs/MIGRATION-ZEP-TO-LIGHTRAG.md` Sektion "Code-Skeleton". Dieser ist im Spike-Code bereits korrigiert und muss in den produktiven Code von Phase 1 mit der Korrektur übernommen werden. Details siehe Sektion "Befund am RagManager-Skeleton".
 
@@ -77,16 +77,16 @@ Folgende Punkte aus Phase 0 des Migrationsplans wurden NICHT validiert, weil sie
 
 | Frage | Warum vertagt | Wann nachholbar |
 |---|---|---|
-| LLM-Calls pro 10 MB PDF | Mock-LLM liefert sofort, sagt nichts über echte Bailian-Costs aus | Sobald `LLM_API_KEY`/`LLM_BASE_URL` für Bailian verfügbar |
+| LLM-Calls pro 10 MB PDF | Mock-LLM liefert sofort, sagt nichts über echte Provider-Costs aus | Sobald `LLM_API_KEY`/`LLM_BASE_URL` für den gewählten LLM-Provider verfügbar |
 | Wallclock-Time für Indexierung 10 MB PDF | Ohne LLM- und Embedding-Latenz nicht aussagekräftig | siehe oben |
 | Output-Qualität von `aquery(mode="local"/"global"/"hybrid")` | Mock-LLM gibt fixe Strings zurück | siehe oben |
-| Bailian-Embedding-Kompatibilität (`text-embedding-v3`, 1024-dim) | Mock-Embedding ist Hash-basiert, nicht das echte Modell | sobald `EMBED_API_KEY` verfügbar |
+| Embedding-Kompatibilität (Default 1024-dim, OpenAI-SDK-Format) | Mock-Embedding ist Hash-basiert, nicht das echte Modell | sobald `EMBED_API_KEY` für den gewählten Embedding-Provider verfügbar |
 | Abbruchkriterium "LLM-Calls pro 10 MB > 10.000" | nicht messbar im Mock | siehe oben |
 | Abbruchkriterium "Wallclock > 30 Min für 10 MB" | nicht messbar im Mock | siehe oben |
 
 Schätzung des Echt-Spike-Aufwands für die Cost-Validierung:
 
-- 1 MB Beispiel-Text (kleiner als die im Plan vorgesehenen 5-10 MB) erzeugt mit Bailian Qwen-3 ungefähr 200-500 LLM-Calls (Entity-Extraction + Merging + Summarization), Kosten in der Größenordnung 0,02-0,10 USD bei aktuellen Bailian-Tarifen. Wallclock-Schätzung: 2-5 Min.
+- 1 MB Beispiel-Text (kleiner als die im Plan vorgesehenen 5-10 MB) erzeugt mit einem mid-tier Cloud-LLM ungefähr 200-500 LLM-Calls (Entity-Extraction + Merging + Summarization), Kosten in der Größenordnung 0,02-0,10 USD bei typischen Tarifen. Wallclock-Schätzung: 2-5 Min. Konkrete Zahlen sind provider-abhängig und werden im Echt-Spike gemessen.
 - Damit lässt sich ein vorsichtiger Echt-Spike als Folgeschritt für ca. 0,05 USD durchführen, ohne sofort die volle 5-10 MB Variante zu fahren.
 
 ## RagManager-Skeleton — produktionsreif?
@@ -111,8 +111,8 @@ Repräsentativ und belastbar:
 
 Fragwürdig — was Mocks NICHT zeigen:
 
-- Echtes Bailian-Embedding-API-Schema (Body-Format, Auth-Header, Rate-Limits, Token-Window-Limits) — der Mock umgeht das komplett. Vor Phase 2 ist eine Validierung mit `text-embedding-v3` zwingend.
-- Echte LightRAG-LLM-Prompt-Robustheit gegen Bailian-Output-Drift (Bailian Qwen liefert manchmal Markdown-Wrapper um die Tuple-Records, manchmal verbindet es Records mit Tuple-Delimiter statt Newline — siehe `lightrag/operate.py:970-1004` mit dem `fix_tuple_delimiter_corruption`-Workaround). Wie oft der Workaround in der Praxis greift, lässt sich nur mit echten Calls beobachten.
+- Echtes Embedding-API-Schema des gewählten Providers (Body-Format, Auth-Header, Rate-Limits, Token-Window-Limits) — der Mock umgeht das komplett. Vor Phase 2 ist eine Validierung mit dem realen Embedding-Modell zwingend.
+- Echte LightRAG-LLM-Prompt-Robustheit gegen Provider-Output-Drift (manche LLMs liefern Markdown-Wrapper um die Tuple-Records, manche verbinden Records mit Tuple-Delimiter statt Newline — siehe `lightrag/operate.py:970-1004` mit dem `fix_tuple_delimiter_corruption`-Workaround). Wie oft der Workaround in der Praxis greift, lässt sich nur mit echten Calls beobachten und ist provider-/modell-abhängig.
 - Cost-Profile pro Insert-Typ: 24 Mock-LLM-Calls für 9 winzige Inserts ergeben hochgerechnet ca. 200-300 Mock-Calls pro 1 MB Text. Wie sich das auf echte LightRAG-Default-Konfig (`max_parallel_insert=4`, `entity_extract_max_gleaning`, etc.) skaliert, ist eine Funktion des echten LLM-Verhaltens.
 - Output-Qualität von `aquery` ist im Mock-Setup nicht aussagekräftig — der Mock gibt einen Fixed-String zurück.
 
@@ -120,11 +120,11 @@ Fragwürdig — was Mocks NICHT zeigen:
 
 1. **Sofort**: Mock-Spike-Befunde in den Migrationsplan einarbeiten (3 Korrekturen, siehe oben), v.a. die Loop-Bindings-Pflicht für `initialize_pipeline_status()`. Das ist eine kleine Plan-Aktualisierung, kein eigener PR.
 
-2. **Vor Phase 1-Start**: Kleiner Echt-Spike mit ca. 1 MB Beispiel-Text aus `backend/uploads/` und echten Bailian-Keys. Geschätzte Kosten 0,02-0,10 USD. Validiert: Bailian-Embedding-Kompatibilität (`text-embedding-v3`, 1024-dim), echte LLM-Output-Robustheit, Wallclock-Zeit pro 1 MB. Liefert die fehlenden Zahlen für die Phase-0-Abbruchkriterien (10.000-Calls-Limit, 30-Min-Limit). Das Spike-Skript ist dafür bereits 90 Prozent fertig — nur die zwei Mock-Funktionen werden gegen echte Bailian-Calls (über `lightrag.llm.openai.openai_complete_if_cache` und `openai_embed`) ausgetauscht.
+2. **Vor Phase 1-Start**: Kleiner Echt-Spike mit ca. 1 MB Beispiel-Text aus `backend/uploads/` und echten LLM-Keys (beliebiger OpenAI-SDK-kompatibler Provider). Geschätzte Kosten 0,02-0,10 USD bei typischen Cloud-LLM-Tarifen, 0 USD bei lokalem LLM (Ollama). Validiert: Embedding-Kompatibilität (provider-abhängige Dim, Default 1024), echte LLM-Output-Robustheit, Wallclock-Zeit pro 1 MB. Liefert die fehlenden Zahlen für die Phase-0-Abbruchkriterien (10.000-Calls-Limit, 30-Min-Limit). Das Spike-Skript ist dafür bereits fertig (`backend/scripts/lightrag_real_spike.py`) — provider-agnostisch via OpenAI-SDK + Cost-Cap-Guard.
 
 3. **Nach Echt-Spike grün**: Phase 1 starten (`feat(rag): introduce RagManager and migrate graph_builder`). Das Spike-Skript-Skeleton kann fast 1:1 nach `backend/app/services/rag_manager.py` übernommen werden, mit den oben aufgezählten Ergänzungen.
 
-4. **Phase 2 ohne weiteren Echt-Spike**: nicht empfohlen. Phase 2 ist die Indexing-Migration, und ohne valide Cost-Daten aus Schritt 2 fliegt Phase 2 blind ins Bailian-LLM-Cost-Risiko (Plan-Risiko Nummer 1 mit Wahrscheinlichkeit "hoch" und Auswirkung "hoch"). Schritt 2 ist Pflicht-Vorbedingung für Phase 2.
+4. **Phase 2 ohne weiteren Echt-Spike**: nicht empfohlen. Phase 2 ist die Indexing-Migration, und ohne valide Cost-Daten aus Schritt 2 fliegt Phase 2 blind ins LLM-Cost-Risiko (Plan-Risiko Nummer 1 mit Wahrscheinlichkeit "hoch" und Auswirkung "hoch"). Schritt 2 ist Pflicht-Vorbedingung für Phase 2.
 
 5. **Risiko Multi-Tenancy parallel**: Issue #2527 im LightRAG-Repo deutet an, dass NanoVectorDB unter `working_dir`-Isolation und gleichzeitiger Concurrent-Last in seltenen Fällen Datenverlust haben kann. Im Mock-Spike (A3 + A5) keine Auffälligkeit, aber Last-Test mit echten Embeddings im Produktiv-Stack wäre eine Phase-5-Smoke-Test-Erweiterung wert.
 

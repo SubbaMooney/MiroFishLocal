@@ -156,7 +156,7 @@
 <strong>TL;DR</strong>
 <ul style="margin-bottom:0">
   <li><strong>Aufwand</strong>: 8-9 Engineer-Tage in 6 Phasen</li>
-  <li><strong>Hauptrisiko</strong>: LLM-Call-Volumen während Indexierung (50 MB PDF kann tausende Bailian-Calls erzeugen)</li>
+  <li><strong>Hauptrisiko</strong>: LLM-Call-Volumen während Indexierung (50 MB PDF kann tausende LLM-Calls erzeugen)</li>
   <li><strong>Architektur-Bruch</strong>: LightRAG gibt <strong>generierten Text</strong> zurück, Zep gab <strong>strukturierte Knoten/Edges</strong>. Caller-Code (besonders <code>report_agent.py</code>) muss substantiell umgeschrieben werden.</li>
   <li><strong>Empfehlung</strong>: Phase 0 (Spike mit echter Beispiel-PDF) <strong>vor</strong> allem anderen — entscheidet, ob LLM-Cost und Performance akzeptabel sind.</li>
 </ul>
@@ -316,7 +316,7 @@ flowchart TB
   <li><code>backend/scripts/lightrag_spike.py</code> mit minimalem Beispiel anlegen (Pip-Install, kleine Test-PDF, ein <code>ainsert</code>, ein <code>aquery</code>).</li>
   <li>Echte Beispiel-Seed-PDF aus <code>backend/uploads/</code> (5-10 MB) durch LightRAG schicken und LLM-Calls zählen + Wallclock-Time messen.</li>
   <li>Output qualitativ prüfen: liefert <code>aquery(mode="local")</code> brauchbare Inhalte, die der Report-Agent als Tool-Antwort verarbeiten kann?</li>
-  <li>Bailian-Embedding-API mit <code>text-embedding-v3</code> testen (1024-dim).</li>
+  <li>Embedding-API des konfigurierten Providers testen (Default: 1024-dim, OpenAI-SDK-kompatibel).</li>
 </ol>
 <div class="callout warn">
 <strong>Abbruchkriterien</strong>:
@@ -469,7 +469,7 @@ class RagManager:
     <tr><td>NanoVectorDB nicht threadsafe</td><td>sicher</td><td>mittel</td><td>Per-Graph <code>asyncio.Lock</code> im RagManager</td></tr>
     <tr><td>Multi-Project-Isolation fehlerhaft</td><td>mittel</td><td>hoch</td><td>Phase 5 Smoke-Test, getrennte Working-Dirs</td></tr>
     <tr><td>Pflicht-Init vergessen</td><td>hoch</td><td>hoch</td><td>RagManager als einziger Init-Pfad</td></tr>
-    <tr><td>Bailian-Rate-Limits beim Concurrent-Indexing</td><td>mittel</td><td>mittel</td><td><code>llm_model_max_async=4</code></td></tr>
+    <tr><td>LLM-Provider-Rate-Limits beim Concurrent-Indexing</td><td>mittel</td><td>mittel</td><td><code>llm_model_max_async=4</code></td></tr>
     <tr><td><code>lightrag-hku</code> v1.5 noch RC</td><td>niedrig</td><td>niedrig</td><td>Bei v1.4.10 stable bleiben</td></tr>
   </tbody>
 </table>

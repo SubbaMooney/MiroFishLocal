@@ -42,7 +42,7 @@ Frontend hat keinen Test-Runner konfiguriert. `npm run preview` dient nur zur lo
 
 | Variable | Pflicht | Zweck |
 |---|---|---|
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME` | ja | Haupt-LLM (OpenAI-SDK-Format, default Qwen via Bailian) |
+| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME` | ja | Haupt-LLM, beliebiger OpenAI-SDK-kompatibler Endpoint (provider-agnostisch) |
 | `ZEP_API_KEY` | ja | Zep Cloud Memory Graph |
 | `LLM_BOOST_*` | optional | "Boost"-LLM für Speed-kritische Calls — **wenn ungenutzt, Variablen ganz entfernen, nicht leer lassen** |
 | `FLASK_HOST` / `FLASK_PORT` / `FLASK_DEBUG` | optional | Server-Binding (Default `0.0.0.0:5001`, Debug an) |

@@ -116,11 +116,11 @@ cp .env.example .env
 
 ```env
 # LLM API配置（支持 OpenAI SDK 格式的任意 LLM API）
-# 推荐使用阿里百炼平台qwen-plus模型：https://bailian.console.aliyun.com/
+# MiroFish 与具体提供商无关；请填入您选择的 LLM 提供商。
 # 注意消耗较大，可先进行小于40轮的模拟尝试
 LLM_API_KEY=your_api_key
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MODEL_NAME=qwen-plus
+LLM_BASE_URL=<your_llm_base_url>
+LLM_MODEL_NAME=<your_model_name>
 
 # Zep Cloud 配置
 # 每月免费额度即可支撑简单使用：https://app.getzep.com/

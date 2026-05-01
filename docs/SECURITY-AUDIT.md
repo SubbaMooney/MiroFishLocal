@@ -19,7 +19,7 @@ Sieben CRITICAL- und neun HIGH-Findings. Bereits drei davon allein (kein Auth + 
 
 | # | Dienst | Default-Host | Zweck | Was wird gesendet | Auth | Konfigurierbar |
 |---|---|---|---|---|---|---|
-| 1 | LLM-Provider (OpenAI-SDK-Format) | `https://dashscope.aliyuncs.com/compatible-mode/v1` (Alibaba Bailian/Qwen); Fallback `https://api.openai.com/v1` | LLM-Inferenz für Text-Processing, Ontology, Profile, Report-Agent | System-Prompts, **vollständige Seed-PDF/MD/TXT-Inhalte in Chunks**, Persona-Beschreibungen, Tool-Call-Argumente | Bearer Token aus `LLM_API_KEY` | 3 ENV-Vars |
+| 1 | LLM-Provider (OpenAI-SDK-Format) | konfigurierbar via `LLM_BASE_URL` (provider-agnostisch, jeder OpenAI-SDK-kompatible Endpoint) | LLM-Inferenz für Text-Processing, Ontology, Profile, Report-Agent | System-Prompts, **vollständige Seed-PDF/MD/TXT-Inhalte in Chunks**, Persona-Beschreibungen, Tool-Call-Argumente | Bearer Token aus `LLM_API_KEY` | 3 ENV-Vars |
 | 2 | Zep Cloud | `https://api.getzep.com` (SDK-Default, **nicht** überschreibbar) | GraphRAG Memory: Episoden, Entities, Edges, Search | **Vollständiger User-Seed-Inhalt als Episoden**, Graph-IDs, Search-Queries | Bearer Token aus `ZEP_API_KEY` | nur API-Key per ENV |
 | 3 | Boost-LLM (optional) | beliebiger Host aus `LLM_BOOST_BASE_URL` | Speed-kritischer Pfad in Parallel-Simulation | Agenten-Aktionen, Round-Decisions | `LLM_BOOST_API_KEY` | optional, 3 ENV-Vars |
 | 4 | LLM-Provider (camel-ai in Workern) | wie #1, gesetzt via `os.environ['OPENAI_API_KEY']` global | Pro-Agent-Inferenz in Twitter-/Reddit-Workern | Persona-Prompts, simulierte Timelines, Aktion-Choices | wie #1 | wie #1 |
@@ -56,7 +56,7 @@ flowchart LR
   User -.->|Webfonts| GFonts[fonts.googleapis.com]
   User -.->|Mermaid CDN<br/>nur Doku| JsDelivr[cdn.jsdelivr.net]
 
-  Backend -->|Voller Seed-Inhalt<br/>als Prompts| LLM[Alibaba Bailian / OpenAI<br/>via LLM_BASE_URL]
+  Backend -->|Voller Seed-Inhalt<br/>als Prompts| LLM[OpenAI-SDK-kompatibler<br/>LLM-Provider via LLM_BASE_URL]
   Backend -->|Voller Seed-Inhalt<br/>als Episoden| Zep[Zep Cloud<br/>api.getzep.com]
 
   Backend -->|spawnt| Workers[Twitter/Reddit Worker<br/>Subprozesse lokal]

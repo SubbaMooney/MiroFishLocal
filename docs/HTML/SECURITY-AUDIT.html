@@ -196,7 +196,7 @@ Wäre dieses System aktuell deploybar in einer öffentlichen Umgebung? — NEIN.
   <tbody>
     <tr><td>1</td>
       <td>LLM-Provider (OpenAI-SDK-Format)</td>
-      <td><code>https://dashscope.aliyuncs.com/compatible-mode/v1</code> (Alibaba Bailian/Qwen); Fallback <code>https://api.openai.com/v1</code></td>
+      <td>konfigurierbar via <code>LLM_BASE_URL</code> (provider-agnostisch, jeder OpenAI-SDK-kompatible Endpoint)</td>
       <td>LLM-Inferenz für Text-Processing, Ontology, Profile, Report-Agent</td>
       <td>System-Prompts, <strong>vollständige Seed-PDF/MD/TXT-Inhalte in Chunks</strong>, Persona-Beschreibungen, Tool-Call-Argumente</td>
       <td>Bearer Token aus <code>LLM_API_KEY</code></td>
@@ -267,7 +267,7 @@ flowchart LR
   User -.->|Webfonts| GFonts["fonts.googleapis.com"]
   User -.->|"Mermaid CDN<br/>(nur Doku)"| JsDelivr["cdn.jsdelivr.net"]
 
-  Backend -->|"Voller Seed-Inhalt<br/>als Prompts"| LLM["Alibaba Bailian / OpenAI<br/>via LLM_BASE_URL"]
+  Backend -->|"Voller Seed-Inhalt<br/>als Prompts"| LLM["OpenAI-SDK-kompatibler<br/>LLM-Provider via LLM_BASE_URL"]
   Backend -->|"Voller Seed-Inhalt<br/>als Episoden"| Zep["Zep Cloud<br/>api.getzep.com"]
 
   Backend -->|spawnt| Workers["Twitter / Reddit Worker<br/>Subprozesse lokal"]
