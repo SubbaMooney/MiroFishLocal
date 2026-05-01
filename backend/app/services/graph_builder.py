@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..models.task import TaskManager, TaskStatus
 from ..utils.locale import get_locale, set_locale, t
+from ._networkx_mapping import _edge_get, _node_get
 from .rag_manager import RagManager
 from .text_processor import TextProcessor
 
@@ -47,50 +48,6 @@ class GraphInfo:
             "edge_count": self.edge_count,
             "entity_types": self.entity_types,
         }
-
-
-def _node_get(node: Any, *keys: str, default: Any = None) -> Any:
-    """LightRAG/NetworkX Node-Daten kommen mal als Dict, mal als Tuple
-    (node_id, data_dict). Defensive Lookup-Helper, der erste vorhandene
-    Key-Variante zurueckliefert.
-    """
-    if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], dict):
-        node_id, data = node
-        for k in keys:
-            if k == "id":
-                return node_id
-            if k in data:
-                return data[k]
-        return default
-    if isinstance(node, dict):
-        for k in keys:
-            if k in node:
-                return node[k]
-    return default
-
-
-def _edge_get(edge: Any, *keys: str, default: Any = None) -> Any:
-    """Wie ``_node_get``, aber fuer Edges. LightRAG-Edges kommen typischerweise
-    als ((src_id, tgt_id), data_dict)-Tuple oder Dict.
-    """
-    if isinstance(edge, tuple) and len(edge) == 2:
-        endpoints, data = edge
-        if isinstance(data, dict):
-            if isinstance(endpoints, tuple) and len(endpoints) == 2:
-                src, tgt = endpoints
-                if "src_id" in keys or "source" in keys:
-                    return src
-                if "tgt_id" in keys or "target" in keys:
-                    return tgt
-            for k in keys:
-                if k in data:
-                    return data[k]
-        return default
-    if isinstance(edge, dict):
-        for k in keys:
-            if k in edge:
-                return edge[k]
-    return default
 
 
 class GraphBuilderService:
