@@ -23,6 +23,8 @@ Sieben CRITICAL- und neun HIGH-Findings. Bereits drei davon allein (kein Auth + 
 | 2 | Zep Cloud | `https://api.getzep.com` (SDK-Default, **nicht** überschreibbar) | GraphRAG Memory: Episoden, Entities, Edges, Search | **Vollständiger User-Seed-Inhalt als Episoden**, Graph-IDs, Search-Queries | Bearer Token aus `ZEP_API_KEY` | nur API-Key per ENV |
 | 3 | Boost-LLM (optional) | beliebiger Host aus `LLM_BOOST_BASE_URL` | Speed-kritischer Pfad in Parallel-Simulation | Agenten-Aktionen, Round-Decisions | `LLM_BOOST_API_KEY` | optional, 3 ENV-Vars |
 | 4 | LLM-Provider (camel-ai in Workern) | wie #1, gesetzt via `os.environ['OPENAI_API_KEY']` global | Pro-Agent-Inferenz in Twitter-/Reddit-Workern | Persona-Prompts, simulierte Timelines, Aktion-Choices | wie #1 | wie #1 |
+| 5 | HuggingFace Hub (oasis Twitter-Pfad) | `huggingface.co` (Tokenizer + Model `Twitter/twhin-bert-base`, ~350 MB) | Recommendation-Engine in `oasis/social_platform/recsys.py:68/78` (Twitter-Sim only; Reddit-Pfad clean) | Anonymes Modell-Download beim ersten Sim-Start | keine Auth | **Neutralisiert seit `f15015a`**: `HF_HUB_OFFLINE=1` als Default in `Config`; Pflicht-Pre-Cache via `backend/scripts/precache_hf_models.py` (einmalig, danach kein Egress mehr) |
+| 6 | AgentOps Telemetry (camel-ai opt-in) | `app.agentops.ai` | Usage-Tracking für camel-ai Agenten (camel/utils/commons.py:598) | LLM-Call-Trace, Persona-Daten | Bearer Token aus `AGENTOPS_API_KEY` | **Neutralisiert seit `f15015a`**: Config löscht `AGENTOPS_API_KEY` proaktiv aus der Umgebung beim Backend-Start |
 
 Aufrufstellen: `backend/app/utils/llm_client.py:30-33,64`, `backend/app/services/zep_*.py` (alle), `backend/app/services/oasis_profile_generator.py:18,196-208`, `backend/scripts/run_*_simulation.py:119,422-455`.
 
@@ -42,7 +44,7 @@ Aufrufstellen: `backend/app/utils/llm_client.py:30-33,64`, `backend/app/services
 
 | Dienst | Zweck | Aufrufstelle |
 |---|---|---|
-| `fonts.googleapis.com` + `fonts.gstatic.com` | Vier Webfont-Familien (Inter, JetBrains Mono, Noto Sans SC, Space Grotesk) | `frontend/index.html:5-7` |
+| ~~`fonts.googleapis.com` + `fonts.gstatic.com`~~ | ~~Vier Webfont-Familien (Inter, JetBrains Mono, Noto Sans SC, Space Grotesk)~~ | **Behoben seit `49d369d`**: per `@fontsource`-NPM-Pakete self-hosted, Vite-bundled |
 | `localhost:5001` | Backend-API (lokal, via Vite-Proxy) | `frontend/src/api/index.js:6`, `vite.config.js:18-22` |
 | `cdn.jsdelivr.net/npm/mermaid@11/...` | Mermaid-Renderer für die HTML-Doku | `docs/HTML/CLAUDE.html`, `docs/HTML/SECURITY-AUDIT.html` |
 

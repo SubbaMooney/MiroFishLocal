@@ -226,6 +226,24 @@ Wäre dieses System aktuell deploybar in einer öffentlichen Umgebung? — NEIN.
       <td>wie #1</td>
       <td>wie #1</td>
     </tr>
+    <tr>
+      <td>5</td>
+      <td>HuggingFace Hub (oasis Twitter-Pfad)</td>
+      <td><code>huggingface.co</code> (Tokenizer + Model <code>Twitter/twhin-bert-base</code>, ~350 MB)</td>
+      <td>Recommendation-Engine in <code>oasis/social_platform/recsys.py:68/78</code> (Twitter-Sim only; Reddit-Pfad clean)</td>
+      <td>Anonymes Modell-Download beim ersten Sim-Start</td>
+      <td>keine Auth</td>
+      <td><strong>Neutralisiert seit <code>f15015a</code></strong>: <code>HF_HUB_OFFLINE=1</code> als Default in <code>Config</code>; Pflicht-Pre-Cache via <code>backend/scripts/precache_hf_models.py</code></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>AgentOps Telemetry (camel-ai opt-in)</td>
+      <td><code>app.agentops.ai</code></td>
+      <td>Usage-Tracking für camel-ai Agenten (<code>camel/utils/commons.py:598</code>)</td>
+      <td>LLM-Call-Trace, Persona-Daten</td>
+      <td>Bearer Token aus <code>AGENTOPS_API_KEY</code></td>
+      <td><strong>Neutralisiert seit <code>f15015a</code></strong>: Config löscht <code>AGENTOPS_API_KEY</code> proaktiv aus der Umgebung beim Backend-Start</td>
+    </tr>
   </tbody>
 </table>
 
@@ -251,7 +269,7 @@ Wäre dieses System aktuell deploybar in einer öffentlichen Umgebung? — NEIN.
 <table>
   <thead><tr><th>Dienst</th><th>Zweck</th><th>Aufrufstelle</th></tr></thead>
   <tbody>
-    <tr><td><code>fonts.googleapis.com</code> + <code>fonts.gstatic.com</code></td><td>Vier Webfont-Familien</td><td><code>frontend/index.html:5-7</code></td></tr>
+    <tr><td><del><code>fonts.googleapis.com</code> + <code>fonts.gstatic.com</code></del></td><td><del>Vier Webfont-Familien</del></td><td><strong>Behoben seit <code>49d369d</code></strong>: per <code>@fontsource</code>-NPM-Pakete self-hosted, Vite-bundled</td></tr>
     <tr><td><code>localhost:5001</code></td><td>Backend-API (lokal, via Vite-Proxy)</td><td><code>frontend/src/api/index.js:6</code>, <code>vite.config.js:18-22</code></td></tr>
     <tr><td><code>cdn.jsdelivr.net/npm/mermaid@11/...</code></td><td>Mermaid-Renderer für die HTML-Doku</td><td><code>docs/HTML/CLAUDE.html</code>, <code>docs/HTML/SECURITY-AUDIT.html</code></td></tr>
   </tbody>
