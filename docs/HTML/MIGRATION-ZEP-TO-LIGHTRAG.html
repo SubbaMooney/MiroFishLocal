@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Zep &rarr; LightRAG Migration</title>
+<title>Zep → LightRAG Migration</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -13,8 +13,14 @@
     --code-bg: #161b22;
     --border: #30363d;
     --table-stripe: #161b22;
-    --callout-bg: #1a3a4a;
-    --callout-fg: #c1ecff;
+    --pass-bg: #1a4a2e;
+    --pass-fg: #a4f0bf;
+    --fail-bg: #5c1a1a;
+    --fail-fg: #ffd1d1;
+    --warn-bg: #5c3a1a;
+    --warn-fg: #ffe1c1;
+    --info-bg: #1a3a4a;
+    --info-fg: #c1ecff;
   }
   @media (prefers-color-scheme: light) {
     :root {
@@ -25,8 +31,14 @@
       --code-bg: #f6f8fa;
       --border: #d0d7de;
       --table-stripe: #f6f8fa;
-      --callout-bg: #ddf4ff;
-      --callout-fg: #1a4d6b;
+      --pass-bg: #d4f0dd;
+      --pass-fg: #1a5c30;
+      --fail-bg: #ffe5e5;
+      --fail-fg: #8a1c1c;
+      --warn-bg: #ffefd6;
+      --warn-fg: #8a4a00;
+      --info-bg: #ddf4ff;
+      --info-fg: #1a4d6b;
     }
   }
   * { box-sizing: border-box; }
@@ -38,103 +50,66 @@
     line-height: 1.6;
   }
   main {
-    max-width: 1080px;
-    margin: 2rem auto;
+    max-width: 980px;
+    margin: 2.5rem auto;
     padding: 0 1.5rem 4rem;
   }
-  h1, h2, h3, h4 { line-height: 1.25; }
-  h1 { border-bottom: 1px solid var(--border); padding-bottom: .3em; font-size: 2em; }
-  h2 { border-bottom: 1px solid var(--border); padding-bottom: .3em; margin-top: 2.4em; font-size: 1.55em; }
-  h3 { margin-top: 1.8em; font-size: 1.25em; }
-  h4 { margin-top: 1.4em; font-size: 1.05em; }
+  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; }
+  h2 { margin-top: 2.2em; font-size: 1.45em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+  h3 { margin-top: 1.6em; font-size: 1.15em; }
+  h4 { margin-top: 1.3em; font-size: 1em; }
   p, li { color: var(--fg); }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, pre, kbd, samp {
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.92em;
   }
-  code {
-    background: var(--code-bg);
-    padding: 0.15em 0.4em;
-    border-radius: 4px;
-  }
   pre {
     background: var(--code-bg);
-    padding: 1rem;
+    border: 1px solid var(--border);
+    padding: 1rem 1.1rem;
     border-radius: 6px;
     overflow-x: auto;
-    border: 1px solid var(--border);
+    font-size: 0.88em;
+    line-height: 1.5;
   }
-  pre code { background: transparent; padding: 0; }
+  pre code { background: transparent; border: 0; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.94em; }
+  th, td { border: 1px solid var(--border); padding: 0.55em 0.75em; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
   blockquote {
-    border-left: 3px solid var(--accent);
-    background: var(--code-bg);
-    color: var(--fg);
     margin: 1em 0;
     padding: 0.6em 1em;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1em 0;
-    font-size: 0.93em;
-  }
-  th, td {
-    border: 1px solid var(--border);
-    padding: 0.5rem 0.75rem;
-    text-align: left;
-    vertical-align: top;
-  }
-  thead { background: var(--code-bg); }
-  tbody tr:nth-child(even) { background: var(--table-stripe); }
-  ul, ol { padding-left: 1.5em; }
-  li { margin: 0.2em 0; }
-  hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
-  .mermaid {
-    text-align: center;
-    margin: 1.5em 0;
+    border-left: 4px solid var(--accent);
     background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-  }
-  .topbar {
-    background: var(--code-bg);
-    border-bottom: 1px solid var(--border);
-    padding: 0.6rem 1.5rem;
-    font-size: 0.9em;
     color: var(--muted);
   }
-  .topbar a { margin-right: 1rem; }
-  .callout {
-    background: var(--callout-bg);
-    color: var(--callout-fg);
-    border-radius: 8px;
-    padding: 0.8rem 1.2rem;
-    margin: 1em 0 1.5em;
+  ul, ol { padding-left: 1.6em; }
+  li { margin: 0.2em 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+  footer {
+    margin-top: 3em;
+    padding-top: 1em;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85em;
   }
+  .mermaid { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1em 0; }
 </style>
 </head>
 <body>
-
-<div class="topbar">
-  <a href="./index.html">Index</a>
-  <a href="./SECURITY-AUDIT.html">Security-Audit</a>
-  <a href="./SPIKE-LIGHTRAG-PHASE0.html">Spike Phase 0</a>
-  <span>MiroFish &middot; Zep &rarr; LightRAG Migration &middot; 2026-04-30</span>
-</div>
-
 <main>
 
-<h1>Migration Zep Cloud &rarr; LightRAG</h1>
+<h1>Migration Zep Cloud → LightRAG</h1>
+<p>Datum: 2026-04-30 · Branch: <code>main</code> · Plan-Stand: pre-implementation</p>
+<p>Ziel: Externe Daten-Senke "Zep Cloud" durch lokal lauffähiges <strong>LightRAG</strong> (<code>lightrag-hku</code>) ersetzen, sodass das System keine Inhalte mehr außerhalb des LLM-Providers kommuniziert.</p>
 
-<p>Datum: 2026-04-30 &middot; Branch: <code>main</code> &middot; Plan-Stand: pre-implementation</p>
-
-<p>Ziel: Externe Daten-Senke &quot;Zep Cloud&quot; durch lokal lauffähiges <strong>LightRAG</strong> (<code>lightrag-hku</code>) ersetzen, sodass das System keine Inhalte mehr außerhalb des LLM-Providers kommuniziert.</p>
-
-<h2 id="tldr">TL;DR</h2>
-
+<h2>TL;DR</h2>
 <ul>
   <li><strong>Aufwand</strong>: 8-9 Engineer-Tage in 6 Phasen</li>
   <li><strong>Hauptrisiko</strong>: LLM-Call-Volumen während Indexierung (50 MB PDF kann tausende LLM-Calls erzeugen)</li>
@@ -142,7 +117,7 @@
   <li><strong>Empfehlung</strong>: Phase 0 (Spike mit echter Beispiel-PDF) <strong>vor</strong> allem anderen — entscheidet, ob LLM-Cost und Performance akzeptabel sind.</li>
 </ul>
 
-<h2 id="arch">Architektur-Vergleich</h2>
+<h2>Architektur-Vergleich</h2>
 
 <pre class="mermaid">
 flowchart TB
@@ -167,9 +142,7 @@ flowchart TB
 <p><strong>Drei fundamentale Mismatches</strong>:</p>
 
 <table>
-  <thead>
-    <tr><th>Dimension</th><th>Zep</th><th>LightRAG</th></tr>
-  </thead>
+  <thead><tr><th>Dimension</th><th>Zep</th><th>LightRAG</th></tr></thead>
   <tbody>
     <tr><td>Insert-Modell</td><td>Async mit <code>processed</code>-Polling auf Episode-Basis</td><td>Synchron, blockiert bis Graph-Extraktion fertig</td></tr>
     <tr><td>Query-Rückgabe</td><td><code>Node</code>/<code>Edge</code>-Objekte mit <code>.fact</code>, <code>.summary</code>, <code>.attributes</code></td><td><strong>Generierter String</strong> (LLM-Antwort)</td></tr>
@@ -178,124 +151,76 @@ flowchart TB
   </tbody>
 </table>
 
-<h2 id="api-mapping">Vollständige API-Mapping-Tabelle</h2>
+<h2>Vollständige API-Mapping-Tabelle</h2>
 
 <table>
-  <thead>
-    <tr><th>Zep-Operation</th><th>Aufrufstellen</th><th>LightRAG-Äquivalent</th><th>Aufwand</th></tr>
-  </thead>
+  <thead><tr><th>Zep-Operation</th><th>Aufrufstellen</th><th>LightRAG-Äquivalent</th><th>Aufwand</th></tr></thead>
   <tbody>
-    <tr>
-      <td><code>Zep(api_key=...)</code></td>
-      <td>5 Services (<code>graph_builder.py:51</code>, <code>zep_tools.py:430</code>, <code>zep_graph_memory_updater.py:246</code>, <code>zep_entity_reader.py:86</code>, <code>oasis_profile_generator.py:208</code>)</td>
-      <td><code>LightRAG(working_dir=..., llm_model_func=..., embedding_func=...)</code> + <code>await rag.initialize_storages()</code> + <code>await initialize_pipeline_status()</code></td>
-      <td>mittel — alle 5 Init-Calls über zentralen <code>RagManager</code>-Singleton</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.create(graph_id, name, ...)</code></td>
-      <td><code>graph_builder.py:197-202</code></td>
-      <td><code>LightRAG(working_dir=f&quot;{base}/{graph_id}&quot;)</code> — Verzeichnis = Graph-Identität</td>
-      <td>trivial</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.set_ontology(graph_ids, entities, edges)</code></td>
-      <td><code>graph_builder.py:288-292</code></td>
-      <td><strong>Wegfall</strong> — LightRAG hat kein Ontologie-Schema. Ontologie-Hints können in System-Prompts der <code>llm_model_func</code> eingebettet werden</td>
-      <td>aufwändig — Ontology-Pipeline neu denken</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.add_batch(graph_id, episodes=[EpisodeData(data=text, type=&quot;text&quot;)])</code></td>
-      <td><code>graph_builder.py:325-334</code></td>
-      <td><code>await rag.ainsert(text)</code> (kein Batch-API, dafür interner <code>insert_batch_size</code>-Parameter)</td>
-      <td>mittel — Polling-Logik (<code>_wait_for_episodes</code>) entfällt komplett</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.episode.get(uuid_).processed</code></td>
-      <td><code>graph_builder.py:379</code> (Polling-Loop)</td>
-      <td><strong>Wegfall</strong> — <code>ainsert</code> ist synchron, kein Polling nötig</td>
-      <td>trivial</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.add(graph_id, type, data)</code> (Memory-Updater)</td>
-      <td><code>zep_graph_memory_updater.py:414-418</code></td>
-      <td><code>await rag.ainsert(combined_text)</code></td>
-      <td>mittel — teurer pro Call als Zep (LLM-Extraktion bei jedem Insert), Batch-Größe und Frequenz neu kalibrieren</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.search(graph_id, query, scope=&quot;edges&quot;, limit, reranker)</code></td>
-      <td><code>zep_tools.py:491-498</code>, <code>oasis_profile_generator.py:329-333</code></td>
-      <td><code>await rag.aquery(query, param=QueryParam(mode=&quot;global&quot;))</code></td>
-      <td>hoch — Caller erwarten Edge-Objekte mit <code>.fact</code>, bekommen jetzt String</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.search(..., scope=&quot;nodes&quot;)</code></td>
-      <td><code>zep_tools.py:491-498</code>, <code>oasis_profile_generator.py:350-354</code></td>
-      <td><code>await rag.aquery(query, param=QueryParam(mode=&quot;local&quot;))</code></td>
-      <td>hoch — gleiche Problematik</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.node.get(uuid_)</code></td>
-      <td><code>zep_tools.py:729-731</code>, <code>zep_entity_reader.py:350-352</code></td>
-      <td><code>rag.chunk_entity_relation_graph.get_node(name)</code> (NetworkX-Zugriff über Entity-Name, nicht UUID)</td>
-      <td>mittel — UUID&rarr;Name-Resolution nötig</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.node.get_entity_edges(node_uuid)</code></td>
-      <td><code>zep_entity_reader.py:194-196</code></td>
-      <td><code>rag.chunk_entity_relation_graph.get_node_edges(name)</code> (NetworkX)</td>
-      <td>mittel</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.node.get_by_graph_id(graph_id, limit, uuid_cursor)</code></td>
-      <td><code>zep_paging.py:79</code> (5 Caller)</td>
-      <td><code>list(rag.chunk_entity_relation_graph.nodes())</code> (NetworkX)</td>
-      <td>trivial — Pagination meist nicht nötig bei lokalem Graph</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.edge.get_by_graph_id(...)</code></td>
-      <td><code>zep_paging.py:123</code> (5 Caller)</td>
-      <td><code>list(rag.chunk_entity_relation_graph.edges())</code> (NetworkX)</td>
-      <td>trivial</td>
-    </tr>
-    <tr>
-      <td><code>client.graph.delete(graph_id)</code></td>
-      <td><code>graph_builder.py:505</code></td>
-      <td><code>shutil.rmtree(working_dir)</code></td>
-      <td>trivial</td>
-    </tr>
+    <tr><td><code>Zep(api_key=...)</code></td><td>5 Services (<code>graph_builder.py:51</code>, <code>zep_tools.py:430</code>, <code>zep_graph_memory_updater.py:246</code>, <code>zep_entity_reader.py:86</code>, <code>oasis_profile_generator.py:208</code>)</td><td><code>LightRAG(working_dir=..., llm_model_func=..., embedding_func=...)</code> + <code>await rag.initialize_storages()</code> + <code>await initialize_pipeline_status()</code></td><td>mittel — alle 5 Init-Calls über zentralen <code>RagManager</code>-Singleton</td></tr>
+    <tr><td><code>client.graph.create(graph_id, name, ...)</code></td><td><code>graph_builder.py:197-202</code></td><td><code>LightRAG(working_dir=f"{base}/{graph_id}")</code> — Verzeichnis = Graph-Identität</td><td>trivial</td></tr>
+    <tr><td><code>client.graph.set_ontology(graph_ids, entities, edges)</code></td><td><code>graph_builder.py:288-292</code></td><td><strong>Wegfall</strong> — LightRAG hat kein Ontologie-Schema. Ontologie-Hints können in System-Prompts der <code>llm_model_func</code> eingebettet werden</td><td>aufwändig — Ontology-Pipeline neu denken</td></tr>
+    <tr><td><code>client.graph.add_batch(graph_id, episodes=[EpisodeData(data=text, type="text")])</code></td><td><code>graph_builder.py:325-334</code></td><td><code>await rag.ainsert(text)</code> (kein Batch-API, dafür interner <code>insert_batch_size</code>-Parameter)</td><td>mittel — Polling-Logik (<code>_wait_for_episodes</code>) entfällt komplett</td></tr>
+    <tr><td><code>client.graph.episode.get(uuid_).processed</code></td><td><code>graph_builder.py:379</code> (Polling-Loop)</td><td><strong>Wegfall</strong> — <code>ainsert</code> ist synchron, kein Polling nötig</td><td>trivial</td></tr>
+    <tr><td><code>client.graph.add(graph_id, type, data)</code> (Memory-Updater)</td><td><code>zep_graph_memory_updater.py:414-418</code></td><td><code>await rag.ainsert(combined_text)</code></td><td>mittel — teurer pro Call als Zep (LLM-Extraktion bei jedem Insert), Batch-Größe und Frequenz neu kalibrieren</td></tr>
+    <tr><td><code>client.graph.search(graph_id, query, scope="edges", limit, reranker)</code></td><td><code>zep_tools.py:491-498</code>, <code>oasis_profile_generator.py:329-333</code></td><td><code>await rag.aquery(query, param=QueryParam(mode="global"))</code></td><td>hoch — Caller erwarten Edge-Objekte mit <code>.fact</code>, bekommen jetzt String</td></tr>
+    <tr><td><code>client.graph.search(..., scope="nodes")</code></td><td><code>zep_tools.py:491-498</code>, <code>oasis_profile_generator.py:350-354</code></td><td><code>await rag.aquery(query, param=QueryParam(mode="local"))</code></td><td>hoch — gleiche Problematik</td></tr>
+    <tr><td><code>client.graph.node.get(uuid_)</code></td><td><code>zep_tools.py:729-731</code>, <code>zep_entity_reader.py:350-352</code></td><td><code>rag.chunk_entity_relation_graph.get_node(name)</code> (NetworkX-Zugriff über Entity-Name, nicht UUID)</td><td>mittel — UUID→Name-Resolution nötig</td></tr>
+    <tr><td><code>client.graph.node.get_entity_edges(node_uuid)</code></td><td><code>zep_entity_reader.py:194-196</code></td><td><code>rag.chunk_entity_relation_graph.get_node_edges(name)</code> (NetworkX)</td><td>mittel</td></tr>
+    <tr><td><code>client.graph.node.get_by_graph_id(graph_id, limit, uuid_cursor)</code></td><td><code>zep_paging.py:79</code> (5 Caller)</td><td><code>list(rag.chunk_entity_relation_graph.nodes())</code> (NetworkX)</td><td>trivial — Pagination meist nicht nötig bei lokalem Graph</td></tr>
+    <tr><td><code>client.graph.edge.get_by_graph_id(...)</code></td><td><code>zep_paging.py:123</code> (5 Caller)</td><td><code>list(rag.chunk_entity_relation_graph.edges())</code> (NetworkX)</td><td>trivial</td></tr>
+    <tr><td><code>client.graph.delete(graph_id)</code></td><td><code>graph_builder.py:505</code></td><td><code>shutil.rmtree(working_dir)</code></td><td>trivial</td></tr>
   </tbody>
 </table>
 
-<h2 id="status">Status</h2>
+<h2>Status</h2>
 
 <table>
-  <thead>
-    <tr><th>Phase</th><th>Status</th><th>Tests</th><th>Notiz</th></tr>
-  </thead>
+  <thead><tr><th>Phase</th><th>Status</th><th>Tests</th><th>Notiz</th></tr></thead>
   <tbody>
     <tr><td>Phase 0 — Spike</td><td>erledigt (2026-04-30)</td><td>mock-spike grün</td><td>Go-Empfehlung</td></tr>
     <tr><td>Phase 1 — Foundation</td><td>erledigt (2026-05-01)</td><td>9/9 grün</td><td>RagManager + Factory live</td></tr>
     <tr><td>Phase 2 — Indexing-Pfad</td><td>erledigt (2026-05-01)</td><td>22/22 grün</td><td>graph_builder auf RagManager portiert; Polling-Phase entfernt; ZEP_API_KEY nicht mehr in Indexing-Pfad benoetigt</td></tr>
-    <tr><td>Phase 3 — Search &amp; Tools</td><td>offen</td><td>—</td><td>groesster API-Bruch (Tool-Output-Format)</td></tr>
+    <tr><td>Phase 3 — Search & Tools</td><td>erledigt (2026-05-01)</td><td>47/47 grün</td><td>Phase 3a: EntityReader (NetworkX) ersetzt ZepEntityReader. Phase 3b: LightRAGToolsService + InterviewToolService ersetzen ZepToolsService im report_agent</td></tr>
     <tr><td>Phase 4 — Profile + Memory-Updater</td><td>offen</td><td>—</td><td>Live-Memory-Updater ist Cost-Risiko</td></tr>
-    <tr><td>Phase 5 — Cleanup &amp; Tests</td><td>offen</td><td>—</td><td>Zep-Module endgueltig entfernen</td></tr>
+    <tr><td>Phase 5 — Cleanup & Tests</td><td>offen</td><td>—</td><td>Zep-Module endgueltig entfernen</td></tr>
   </tbody>
 </table>
 
-<h2 id="phase2-changes">Anpassungen aus Phase 2 (Implementierung, 2026-05-01)</h2>
+<h2>Anpassungen aus Phase 3 (Implementierung, 2026-05-01)</h2>
+
+<p>Designentscheidungen, die im Plan nicht spezifiziert waren:</p>
+
+<ol>
+  <li><strong>Aufteilung in 3a + 3b</strong> — Phase 3 in zwei Sub-PRs gesplittet:
+    <ul>
+      <li>3a: <code>entity_reader.py</code> (NetworkX-Reads fuer Phase-4-Caller).</li>
+      <li>3b: <code>lightrag_tools.py</code> + <code>interview_tool.py</code> (LLM-Tool-Schicht).</li>
+    </ul>
+  </li>
+  <li><strong>Geteilter NetworkX-Mapper</strong> — graph_builder + entity_reader + lightrag_tools brauchen denselben defensiven Schema-Mapper. Extrahiert nach <code>services/_networkx_mapping.py</code> (private Helfer-Modul). Neue Public-API: <code>node_to_dict</code>, <code>edge_to_dict</code>, <code>map_nodes</code>, <code>map_edges</code>.</li>
+  <li><strong>Datei-Naming</strong> — User-Wahl 2c: <code>lightrag_tools.py</code> (3 RAG-Tools) + <code>interview_tool.py</code> (OASIS-Interview, KEINE LightRAG-Dependency). Vorher Plan-konformer Name <code>lightrag_tools.py</code> wurde irrefuehrend, weil interview_agents OASIS-related ist.</li>
+  <li><strong>panorama_search ohne Temporal-Split</strong> — User-Wahl 3a: <code>historical_facts=[]</code>, <code>historical_count=0</code>. Schema bleibt erhalten, alle Treffer in <code>active_facts</code>. <code>include_expired</code>-Parameter bleibt nur fuer API-Kompat.</li>
+  <li><strong>insight_forge mit ThreadPoolExecutor</strong> — User-Wahl 4b: Sub-Queries laufen parallel ueber <code>ThreadPoolExecutor(max_workers=5)</code>. Mehrere <code>RagManager.query</code>-Coroutines werden auf den selben Loop dispatched, der sie konkurrierend abarbeitet. <code>_safe_query</code>-Wrapper schluckt Sub-Query-Ausnahmen, damit ein Ausfall nicht das gesamte Aggregat killt.</li>
+  <li><strong>interview_agents als Delegate</strong> — <code>LightRAGToolsService.interview_agents</code> instantiiert lazy einen <code>InterviewToolService</code> und ruft <code>interview_agents</code> darauf auf. Damit muss der <code>report_agent</code> nicht zwei Service-Instanzen verwalten — nur Imports und Klassen-Referenzen aendern.</li>
+  <li><strong>Auxiliary Reads</strong> (<code>get_entities_by_type</code>, <code>get_entity_summary</code>, <code>get_graph_statistics</code>, <code>get_simulation_context</code>) sind im Plan nicht erwaehnt, werden aber vom report_agent intern verwendet — alle auf NetworkX umgestellt, gleiche Signatur und Output-Schema.</li>
+  <li><strong><code>self.zep_tools</code>-Variablennamen bleiben</strong> im report_agent (zeigt jetzt auf <code>LightRAGToolsService</code>). Bewusst minimal-invasiv; Cleanup in Phase 5.</li>
+  <li><strong>EntityReader.get_node_edges braucht jetzt graph_id</strong> — minimaler API-Bruch vs. Zep-Variante. NetworkX hat keinen per-Knoten-Index wie Zep, daher muss die Instanz-ID mitgegeben werden. Einziger Caller (intern) wurde mitgezogen.</li>
+</ol>
+
+<h2>Anpassungen aus Phase 2 (Implementierung, 2026-05-01)</h2>
 
 <p>Designentscheidungen, die im Plan nicht spezifiziert waren:</p>
 
 <ol>
   <li><strong>Ontology-Hint live aus Provider</strong> — <code>lightrag_factory.create_llm_func</code> und <code>create_rag</code> nehmen jetzt einen optionalen <code>system_prompt_hint_provider: Callable[[], str]</code>. Der Wrapper liest den Hint bei JEDEM LLM-Call frisch (kein Closure-Capture). Damit kann <code>RagManager.set_ontology</code> die Ontologie ohne Re-Init der LightRAG-Instanz aendern.</li>
   <li><strong>Ontology auto-restore</strong> — <code>RagManager._get_or_create</code> liest beim ersten Zugriff <code>ontology.json</code> aus dem working_dir, falls noch kein Hint im Memory ist. Ueberlebt Prozess-Restarts ohne expliziten <code>set_ontology</code>-Call vom Caller.</li>
-  <li><strong>NetworkX-Schema-Mapping in <code>get_graph_data</code></strong> — Knoten-<code>uuid</code> ist der <code>entity_name</code> selbst (LightRAG kennt keine separaten UUIDs); Edge-<code>uuid</code> ist <code>f&quot;{src}__{tgt}&quot;</code>. Felder, die LightRAG nicht kennt (<code>valid_at</code>, <code>invalid_at</code>, <code>expired_at</code>, <code>episodes</code>, <code>created_at</code>), werden explizit auf <code>None</code>/<code>[]</code> gesetzt — Frontend (<code>GraphPanel.vue</code>) liest diese Felder optional.</li>
+  <li><strong>NetworkX-Schema-Mapping in <code>get_graph_data</code></strong> — Knoten-<code>uuid</code> ist der <code>entity_name</code> selbst (LightRAG kennt keine separaten UUIDs); Edge-<code>uuid</code> ist <code>f"{src}__{tgt}"</code>. Felder, die LightRAG nicht kennt (<code>valid_at</code>, <code>invalid_at</code>, <code>expired_at</code>, <code>episodes</code>, <code>created_at</code>), werden explizit auf <code>None</code>/<code>[]</code> gesetzt — Frontend (<code>GraphPanel.vue</code>) liest diese Felder optional.</li>
   <li><strong>Defensive Lookup-Helper</strong> — <code>_node_get</code>/<code>_edge_get</code> in <code>graph_builder.py</code> akzeptieren sowohl Dict- als auch <code>(id, data)</code>-Tuple-Schemata, da LightRAGs interne Repraesentation versionsabhaengig variiert.</li>
   <li><strong><code>_wait_for_episodes</code> ENTFERNT</strong> — komplett gestrichen. <code>RagManager.insert</code> ist synchron und blockiert bis NetworkX-Persistierung abgeschlossen ist. Worker-Pipeline-Progress reduziert auf 5/10/15/20–85/90/100 (vorher 5/10/15/20/60/90/100 mit Polling-Phase).</li>
   <li><strong><code>GraphBuilderService.__init__</code> ohne <code>api_key</code></strong> — alle 3 Call-Sites in <code>app/api/graph.py</code> mitgezogen. <code>Config.ZEP_API_KEY</code> bleibt im Config noch erforderlich, weil Phase 3/4 (Tools, Memory-Updater) noch auf Zep laufen.</li>
 </ol>
 
-<h2 id="spike-corrections">Korrekturen aus Mock-Spike (Phase 0, 2026-04-30)</h2>
+<h2>Korrekturen aus Mock-Spike (Phase 0, 2026-04-30)</h2>
 
 <p>Drei Anpassungen an der obigen Mapping-Tabelle und am Code-Skeleton, die der Mock-Spike (siehe <code>docs/SPIKE-LIGHTRAG-PHASE0.md</code>) aufgedeckt hat:</p>
 
@@ -306,9 +231,9 @@ flowchart TB
   <li><strong>NanoVectorDB persistiert in <code>.json</code>, nicht <code>.pkl</code></strong> — nur Doku-Korrektur; relevant falls Backup/Migration-Doku entsteht.</li>
 </ol>
 
-<h2 id="phases">Phasen-Plan</h2>
+<h2>Phasen-Plan</h2>
 
-<h3 id="phase0">Phase 0 — Spike &amp; Risiko-Validierung (1 Tag)</h3>
+<h3>Phase 0 — Spike & Risiko-Validierung (1 Tag)</h3>
 
 <p><strong>Ziel</strong>: Bevor 8 Tage Engineering investiert werden — verifizieren, dass LightRAG für MiroFish in Bezug auf LLM-Cost und Performance akzeptabel ist.</p>
 
@@ -316,19 +241,19 @@ flowchart TB
 <ol>
   <li><code>backend/scripts/lightrag_spike.py</code> mit minimalem Beispiel anlegen (Pip-Install, kleine Test-PDF, ein <code>ainsert</code>, ein <code>aquery</code>).</li>
   <li>Echte Beispiel-Seed-PDF aus <code>backend/uploads/</code> (5-10 MB) durch LightRAG schicken und LLM-Calls zählen + Wallclock-Time messen.</li>
-  <li>Output qualitativ prüfen: liefert <code>aquery(mode=&quot;local&quot;)</code> brauchbare Inhalte, die der Report-Agent als Tool-Antwort verarbeiten kann?</li>
+  <li>Output qualitativ prüfen: liefert <code>aquery(mode="local")</code> brauchbare Inhalte, die der Report-Agent als Tool-Antwort verarbeiten kann?</li>
   <li>Embedding-API des konfigurierten Providers testen (Default: 1024-dim, OpenAI-SDK-kompatibel).</li>
 </ol>
 
 <p>Abbruchkriterien:</p>
 <ul>
-  <li>LLM-Calls pro 10 MB PDF &gt; 10.000 &rarr; Migration nicht wirtschaftlich vertretbar.</li>
-  <li>Wallclock-Time für Indexierung einer 10 MB PDF &gt; 30 Min &rarr; UX inakzeptabel.</li>
+  <li>LLM-Calls pro 10 MB PDF &gt; 10.000 → Migration nicht wirtschaftlich vertretbar.</li>
+  <li>Wallclock-Time für Indexierung einer 10 MB PDF &gt; 30 Min → UX inakzeptabel.</li>
 </ul>
 
 <p><strong>Output</strong>: Spike-Report mit Zahlen, Go/No-Go-Empfehlung.</p>
 
-<h3 id="phase1">Phase 1 — Foundation (1 Tag)</h3>
+<h3>Phase 1 — Foundation (1 Tag)</h3>
 
 <p>Neue Dateien:</p>
 <ul>
@@ -343,16 +268,16 @@ flowchart TB
 </ul>
 
 <p>Pflicht-Init in jeder Instanz:</p>
-
 <pre><code>async def create_rag(working_dir: str) -&gt; LightRAG:
     rag = LightRAG(working_dir=working_dir, llm_model_func=..., embedding_func=...)
     await rag.initialize_storages()
     await initialize_pipeline_status()
-    return rag</code></pre>
+    return rag
+</code></pre>
 
 <p>Tests: minimales pytest-Smoke (Init + Insert + Query gegen Test-Working-Dir).</p>
 
-<h3 id="phase2">Phase 2 — Indexing-Pfad (2 Tage)</h3>
+<h3>Phase 2 — Indexing-Pfad (2 Tage)</h3>
 
 <p>Datei: <code>backend/app/services/graph_builder.py</code></p>
 
@@ -367,22 +292,20 @@ flowchart TB
 
 <p>Test: build_task() für eine Beispiel-PDF durchlaufen, Knoten/Edges im Frontend visualisieren.</p>
 
-<h3 id="phase3">Phase 3 — Search &amp; Tools (2 Tage)</h3>
+<h3>Phase 3 — Search & Tools (2 Tage)</h3>
 
-<p>Datei: <code>backend/app/services/zep_tools.py</code> &rarr; <code>lightrag_tools.py</code> (umbenennen)</p>
+<p>Datei: <code>backend/app/services/zep_tools.py</code> → <code>lightrag_tools.py</code> (umbenennen)</p>
 
 <p>Hier liegt der <strong>größte Architektur-Bruch</strong>. Die Methoden werden vom Report-Agent als Tools aufgerufen:</p>
 
 <table>
-  <thead>
-    <tr><th>Tool-Methode</th><th>heute</th><th>nach Migration</th></tr>
-  </thead>
+  <thead><tr><th>Tool-Methode</th><th>heute</th><th>nach Migration</th></tr></thead>
   <tbody>
     <tr><td><code>search_graph(query, scope, limit)</code></td><td>gibt Liste von Edge/Node-Objekten zurück</td><td>gibt LLM-generierten Antwort-String zurück</td></tr>
     <tr><td><code>get_node_detail(uuid)</code></td><td>Knoten mit Attributen</td><td>Knoten-Daten aus NetworkX (immer noch strukturiert möglich)</td></tr>
     <tr><td><code>get_all_nodes(graph_id)</code></td><td>paginierte Liste</td><td>NetworkX-Iteration</td></tr>
     <tr><td><code>get_all_edges(graph_id)</code></td><td>paginierte Liste</td><td>NetworkX-Iteration</td></tr>
-    <tr><td><code>panorama_search(query)</code></td><td>Hybrid-Suche mit Reranker</td><td><code>aquery(mode=&quot;hybrid&quot;)</code> oder <code>mode=&quot;mix&quot;</code></td></tr>
+    <tr><td><code>panorama_search(query)</code></td><td>Hybrid-Suche mit Reranker</td><td><code>aquery(mode="hybrid")</code> oder <code>mode="mix"</code></td></tr>
   </tbody>
 </table>
 
@@ -393,26 +316,24 @@ flowchart TB
   <li>Falls die strukturierte Form irgendwo wirklich gebraucht wird: parallel <code>rag.chunk_entity_relation_graph</code> direkt anzapfen (NetworkX gibt rohe Daten).</li>
 </ul>
 
-<p>Datei: <code>backend/app/services/zep_entity_reader.py</code> &rarr; <code>entity_reader.py</code></p>
-
+<p>Datei: <code>backend/app/services/zep_entity_reader.py</code> → <code>entity_reader.py</code></p>
 <ul>
   <li><code>get_entity_with_context(uuid)</code>: NetworkX-Knoten + adjazente Edges direkt extrahieren. Behält die strukturierte API, da Caller (<code>oasis_profile_generator.py</code>) damit gut zurechtkommt.</li>
   <li><code>get_all_nodes</code>, <code>get_all_edges</code>: trivial via NetworkX.</li>
   <li><code>filter_defined_entities(entity_types)</code>: NetworkX-Iteration mit Label-Filter.</li>
 </ul>
 
-<p>Datei: <code>backend/app/utils/zep_paging.py</code> &rarr; <strong>gelöscht</strong>. NetworkX braucht keine Pagination, alles im RAM.</p>
+<p>Datei: <code>backend/app/utils/zep_paging.py</code> → <strong>gelöscht</strong>. NetworkX braucht keine Pagination, alles im RAM.</p>
 
-<h3 id="phase4">Phase 4 — Profile Generator + Memory Updater (1-2 Tage)</h3>
+<h3>Phase 4 — Profile Generator + Memory Updater (1-2 Tage)</h3>
 
 <p>Datei: <code>backend/app/services/oasis_profile_generator.py</code></p>
-
 <ul>
-  <li><code>_search_zep_for_entity(entity)</code>: zwei parallele <code>aquery</code>-Calls (<code>mode=&quot;local&quot;</code> und <code>mode=&quot;global&quot;</code>) statt zwei <code>graph.search</code>-Calls.</li>
+  <li><code>_search_zep_for_entity(entity)</code>: zwei parallele <code>aquery</code>-Calls (<code>mode="local"</code> und <code>mode="global"</code>) statt zwei <code>graph.search</code>-Calls.</li>
   <li>ThreadPoolExecutor-Logik bleibt, aber jeder Worker nutzt <code>RagManager.query(...)</code> statt direkten Client.</li>
 </ul>
 
-<p>Datei: <code>backend/app/services/zep_graph_memory_updater.py</code> &rarr; <code>graph_memory_updater.py</code></p>
+<p>Datei: <code>backend/app/services/zep_graph_memory_updater.py</code> → <code>graph_memory_updater.py</code></p>
 
 <p><strong>Kritisch</strong>: Hier passiert Live-Memory-Update während laufender Simulation, alle 0.5 s ein Insert mit 5er-Batch. Mit LightRAG bedeutet jeder Insert eine <strong>vollständige LLM-Extraktion</strong> — das ist mehrere Größenordnungen teurer als Zep-Episodes.</p>
 
@@ -425,7 +346,7 @@ flowchart TB
 
 <p>Empfehlung: <strong>Option A</strong> als Default, <strong>Option B</strong> als feature-flag. <strong>Option C</strong> nur wenn Live-Updates wirklich kritisch sind.</p>
 
-<h3 id="phase5">Phase 5 — Cleanup &amp; Tests (1 Tag)</h3>
+<h3>Phase 5 — Cleanup & Tests (1 Tag)</h3>
 
 <ul>
   <li><code>backend/pyproject.toml</code>: <code>zep-cloud</code> und <code>pymupdf</code> (falls nicht mehr genutzt) entfernen, <code>lightrag-hku</code> finalisieren.</li>
@@ -438,19 +359,19 @@ flowchart TB
 
 <p>Smoke-Tests:</p>
 <ul>
-  <li>Volle Pipeline mit kleiner PDF: build &rarr; simulate &rarr; report.</li>
+  <li>Volle Pipeline mit kleiner PDF: build → simulate → report.</li>
   <li>Multi-Project-Isolation: zwei parallele Graphen, sicherstellen dass <code>aquery(graph_A)</code> keine Inhalte aus <code>graph_B</code> findet.</li>
 </ul>
 
-<h3 id="phase6">Phase 6 — Optional: Production-Hardening (separat, falls nötig)</h3>
+<h3>Phase 6 — Optional: Production-Hardening (separat, falls nötig)</h3>
 
 <p>Wenn der NanoVectorDB+NetworkX-Default-Stack an Skalierungsgrenzen kommt:</p>
 <ul>
-  <li>Faiss als Vector-Storage (<code>pip install &quot;lightrag-hku[offline-storage]&quot;</code>, Storage-Konfig auf <code>FaissVectorDBStorage</code> setzen).</li>
+  <li>Faiss als Vector-Storage (<code>pip install "lightrag-hku[offline-storage]"</code>, Storage-Konfig auf <code>FaissVectorDBStorage</code> setzen).</li>
   <li>PostgreSQL+pgvector wenn Multi-Tenant-Concurrency-Probleme auftreten (Issue #2527 in LightRAG-Repo beachten).</li>
 </ul>
 
-<h2 id="ragmanager">Code-Skeleton: <code>RagManager</code></h2>
+<h2>Code-Skeleton: <code>RagManager</code></h2>
 
 <p>Zentral für die Flask-Sync-Async-Bridge. Singleton im App-Context.</p>
 
@@ -511,7 +432,8 @@ class RagManager:
         import shutil
         working_dir = self._working_dir_base / graph_id
         if working_dir.exists():
-            shutil.rmtree(working_dir)</code></pre>
+            shutil.rmtree(working_dir)
+</code></pre>
 
 <p>Wichtige Punkte:</p>
 <ul>
@@ -521,12 +443,10 @@ class RagManager:
   <li><strong>Insert-Timeout 600 s</strong> wegen Indexierungs-Dauer; Query-Timeout 120 s reicht.</li>
 </ul>
 
-<h2 id="risks">Risiken &amp; Mitigation</h2>
+<h2>Risiken & Mitigation</h2>
 
 <table>
-  <thead>
-    <tr><th>Risiko</th><th>Wahrscheinlichkeit</th><th>Auswirkung</th><th>Mitigation</th></tr>
-  </thead>
+  <thead><tr><th>Risiko</th><th>Wahrscheinlichkeit</th><th>Auswirkung</th><th>Mitigation</th></tr></thead>
   <tbody>
     <tr><td>LLM-Cost-Explosion bei Indexierung</td><td>hoch</td><td>hoch</td><td>Phase-0-Spike mit echter PDF, ggf. Boost-LLM (<code>LLM_BOOST_*</code>) für Indexierung verwenden, kleinere Chunk-Größe</td></tr>
     <tr><td>Performance-Regression bei Insert (synchron statt async)</td><td>hoch</td><td>mittel</td><td>Build-Task läuft bereits in Background-Thread (<code>build_task</code>) — User wartet nicht synchron</td></tr>
@@ -541,7 +461,7 @@ class RagManager:
   </tbody>
 </table>
 
-<h2 id="diff">Was bleibt / was fällt weg</h2>
+<h2>Was bleibt / was fällt weg</h2>
 
 <p><strong>Fällt weg</strong>:</p>
 <ul>
@@ -566,7 +486,7 @@ class RagManager:
   <li>Embedding-Modell-Konfiguration (<code>EMBED_MODEL_NAME</code>, <code>EMBED_DIM</code>, optional <code>EMBED_API_KEY</code>/<code>EMBED_BASE_URL</code>).</li>
 </ul>
 
-<h2 id="order">Empfohlene Reihenfolge der Umsetzung</h2>
+<h2>Empfohlene Reihenfolge der Umsetzung</h2>
 
 <ol>
   <li><strong>Phase 0 zuerst und allein</strong> — entscheidet, ob die Migration sich lohnt. Ergebnis: Go/No-Go.</li>
@@ -578,27 +498,26 @@ class RagManager:
 
 <p>Pro PR: Smoke-Test mit kleiner PDF, Wallclock-Time messen, regression-Check gegen vorherige Phase.</p>
 
-<h2 id="sources">Quellen</h2>
+<h2>Quellen</h2>
 
 <ul>
   <li>LightRAG Repo: <a href="https://github.com/HKUDS/LightRAG"><code>https://github.com/HKUDS/LightRAG</code></a></li>
   <li>PyPI: <a href="https://pypi.org/project/lightrag-hku/"><code>https://pypi.org/project/lightrag-hku/</code></a></li>
   <li>Issue #2527 (Multi-Tenancy): <a href="https://github.com/HKUDS/LightRAG/issues/2527"><code>https://github.com/HKUDS/LightRAG/issues/2527</code></a></li>
   <li>Issue #2011 (Storage-Migration): <a href="https://github.com/HKUDS/LightRAG/issues/2011"><code>https://github.com/HKUDS/LightRAG/issues/2011</code></a></li>
-  <li>Code-Inventur: vollständige Tabelle der 12 Zep-API-Methoden in 5 Service-Dateien (siehe Kapitel &quot;Vollständige API-Mapping-Tabelle&quot;)</li>
+  <li>Code-Inventur: vollständige Tabelle der 12 Zep-API-Methoden in 5 Service-Dateien (siehe Kapitel "Vollständige API-Mapping-Tabelle")</li>
 </ul>
+
+<footer>
+  Auto-generiert parallel zu <code>docs/MIGRATION-ZEP-TO-LIGHTRAG.md</code> · Mermaid latest (ESM) für Diagramme · Layout passt sich an Light/Dark-Mode an.
+</footer>
 
 </main>
 
 <script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@latest/dist/mermaid.esm.min.mjs';
-  const isLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-  mermaid.initialize({
-    startOnLoad: true,
-    theme: isLight ? 'default' : 'dark',
-    securityLevel: 'loose',
-    flowchart: { htmlLabels: true, curve: 'basis' },
-  });
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@latest/dist/mermaid.esm.min.mjs";
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
 </script>
 
 </body>
