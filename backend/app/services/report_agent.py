@@ -22,13 +22,13 @@ from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, t
-from .zep_tools import (
-    ZepToolsService, 
-    SearchResult, 
-    InsightForgeResult, 
+from .lightrag_tools import (
+    LightRAGToolsService,
+    SearchResult,
+    InsightForgeResult,
     PanoramaResult,
-    InterviewResult
 )
+from .interview_tool import InterviewResult
 
 logger = get_logger('mirofish.report_agent')
 
@@ -354,7 +354,8 @@ class ReportConsoleLogger:
         # 添加到 report_agent 相关的 logger
         loggers_to_attach = [
             'mirofish.report_agent',
-            'mirofish.zep_tools',
+            'mirofish.lightrag_tools',
+            'mirofish.interview_tool',
         ]
         
         for logger_name in loggers_to_attach:
@@ -370,7 +371,8 @@ class ReportConsoleLogger:
         if self._file_handler:
             loggers_to_detach = [
                 'mirofish.report_agent',
-                'mirofish.zep_tools',
+                'mirofish.lightrag_tools',
+                'mirofish.interview_tool',
             ]
             
             for logger_name in loggers_to_detach:
@@ -887,7 +889,7 @@ class ReportAgent:
         simulation_id: str,
         simulation_requirement: str,
         llm_client: Optional[LLMClient] = None,
-        zep_tools: Optional[ZepToolsService] = None
+        zep_tools: Optional[LightRAGToolsService] = None
     ):
         """
         初始化Report Agent
@@ -904,7 +906,7 @@ class ReportAgent:
         self.simulation_requirement = simulation_requirement
         
         self.llm = llm_client or LLMClient()
-        self.zep_tools = zep_tools or ZepToolsService()
+        self.zep_tools = zep_tools or LightRAGToolsService()
         
         # 工具定义
         self.tools = self._define_tools()
