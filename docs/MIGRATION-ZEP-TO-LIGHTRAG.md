@@ -60,6 +60,28 @@ flowchart TB
 | `client.graph.edge.get_by_graph_id(...)` | `zep_paging.py:123` (5 Caller) | `list(rag.chunk_entity_relation_graph.edges())` (NetworkX) | trivial |
 | `client.graph.delete(graph_id)` | `graph_builder.py:505` | `shutil.rmtree(working_dir)` | trivial |
 
+## Status
+
+| Phase | Status | Tests | Notiz |
+|---|---|---|---|
+| Phase 0 — Spike | erledigt (2026-04-30) | mock-spike grün | Go-Empfehlung |
+| Phase 1 — Foundation | erledigt (2026-05-01) | 9/9 grün | RagManager + Factory live |
+| Phase 2 — Indexing-Pfad | erledigt (2026-05-01) | 22/22 grün | graph_builder auf RagManager portiert; Polling-Phase entfernt; ZEP_API_KEY nicht mehr in Indexing-Pfad benoetigt |
+| Phase 3 — Search & Tools | offen | — | groesster API-Bruch (Tool-Output-Format) |
+| Phase 4 — Profile + Memory-Updater | offen | — | Live-Memory-Updater ist Cost-Risiko |
+| Phase 5 — Cleanup & Tests | offen | — | Zep-Module endgueltig entfernen |
+
+## Anpassungen aus Phase 2 (Implementierung, 2026-05-01)
+
+Designentscheidungen, die im Plan nicht spezifiziert waren:
+
+1. **Ontology-Hint live aus Provider** — `lightrag_factory.create_llm_func` und `create_rag` nehmen jetzt einen optionalen `system_prompt_hint_provider: Callable[[], str]`. Der Wrapper liest den Hint bei JEDEM LLM-Call frisch (kein Closure-Capture). Damit kann `RagManager.set_ontology` die Ontologie ohne Re-Init der LightRAG-Instanz aendern.
+2. **Ontology auto-restore** — `RagManager._get_or_create` liest beim ersten Zugriff `ontology.json` aus dem working_dir, falls noch kein Hint im Memory ist. Ueberlebt Prozess-Restarts ohne expliziten `set_ontology`-Call vom Caller.
+3. **NetworkX-Schema-Mapping in `get_graph_data`** — Knoten-`uuid` ist der `entity_name` selbst (LightRAG kennt keine separaten UUIDs); Edge-`uuid` ist `f"{src}__{tgt}"`. Felder, die LightRAG nicht kennt (`valid_at`, `invalid_at`, `expired_at`, `episodes`, `created_at`), werden explizit auf `None`/`[]` gesetzt — Frontend (`GraphPanel.vue`) liest diese Felder optional.
+4. **Defensive Lookup-Helper** — `_node_get`/`_edge_get` in `graph_builder.py` akzeptieren sowohl Dict- als auch `(id, data)`-Tuple-Schemata, da LightRAGs interne Repraesentation versionsabhaengig variiert.
+5. **`_wait_for_episodes` ENTFERNT** — komplett gestrichen. `RagManager.insert` ist synchron und blockiert bis NetworkX-Persistierung abgeschlossen ist. Worker-Pipeline-Progress reduziert auf 5/10/15/20–85/90/100 (vorher 5/10/15/20/60/90/100 mit Polling-Phase).
+6. **`GraphBuilderService.__init__` ohne `api_key`** — alle 3 Call-Sites in `app/api/graph.py` mitgezogen. `Config.ZEP_API_KEY` bleibt im Config noch erforderlich, weil Phase 3/4 (Tools, Memory-Updater) noch auf Zep laufen.
+
 ## Korrekturen aus Mock-Spike (Phase 0, 2026-04-30)
 
 Drei Anpassungen an der obigen Mapping-Tabelle und am Code-Skeleton, die der Mock-Spike (siehe `docs/SPIKE-LIGHTRAG-PHASE0.md`) aufgedeckt hat:
