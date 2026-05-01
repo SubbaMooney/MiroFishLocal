@@ -50,12 +50,21 @@ def _get_embed_client() -> OpenAI:
     return OpenAI(api_key=Config.EMBED_API_KEY, base_url=Config.EMBED_BASE_URL)
 
 
-def create_llm_func(model: Optional[str] = None) -> Callable[..., Awaitable[str]]:
+def create_llm_func(
+    model: Optional[str] = None,
+    system_prompt_hint_provider: Optional[Callable[[], str]] = None,
+) -> Callable[..., Awaitable[str]]:
     """Liefert eine async LLM-Func im LightRAG-erwarteten Schema.
 
     LightRAG ruft die Func mit ``(prompt, system_prompt=..., history_messages=...,
     keyword_extraction=..., **kwargs)``. Das OpenAI-SDK ist sync; wir wrappen
     den Call ueber ``run_in_executor`` des aktuellen Event-Loops.
+
+    ``system_prompt_hint_provider`` (optional) wird bei JEDEM Call frisch
+    aufgerufen und liefert einen Hint-String, der dem System-Prompt vorangestellt
+    wird. So kann der Aufrufer die Ontologie nachtraeglich aendern, ohne die
+    LLM-Func neu zu erstellen — Phase 2 Migration nutzt das fuer
+    ``set_ontology``.
     """
     client = _get_llm_client()
     model_name = model or Config.LLM_MODEL_NAME
@@ -72,9 +81,16 @@ def create_llm_func(model: Optional[str] = None) -> Callable[..., Awaitable[str]
         keyword_extraction: bool = False,
         **kwargs: Any,
     ) -> str:
+        # Hint frisch ziehen (mutable im Caller, z.B. RagManager.set_ontology).
+        hint = system_prompt_hint_provider() if system_prompt_hint_provider else ""
+        effective_system = (
+            f"{hint}\n\n{system_prompt}" if hint and system_prompt
+            else (hint or system_prompt or None)
+        )
+
         messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+        if effective_system:
+            messages.append({"role": "system", "content": effective_system})
         if history_messages:
             messages.extend(history_messages)
         messages.append({"role": "user", "content": prompt})
@@ -137,7 +153,10 @@ def create_embed_func(
     return EmbeddingFunc(embedding_dim=embed_dim, max_token_size=max_token_size, func=_embed)
 
 
-async def create_rag(working_dir: str):
+async def create_rag(
+    working_dir: str,
+    system_prompt_hint_provider: Optional[Callable[[], str]] = None,
+):
     """Initialisiert eine LightRAG-Instanz mit dem Pflicht-Init-Pattern.
 
     Pflicht-Invariante (siehe Modul-Docstring): Aufrufer MUSS sicherstellen,
@@ -145,13 +164,18 @@ async def create_rag(working_dir: str):
     Instanz weiterlaeuft — sonst bricht ``initialize_pipeline_status`` spaeter
     mit Loop-Binding-Fehlern weg. Im Produktivpfad uebernimmt das der
     ``RagManager``.
+
+    ``system_prompt_hint_provider`` wird durchgereicht an ``create_llm_func``
+    und ist die Schnittstelle fuer ``RagManager.set_ontology`` — Phase-2-Migration.
     """
     from lightrag import LightRAG
     from lightrag.kg.shared_storage import initialize_pipeline_status
 
     rag = LightRAG(
         working_dir=working_dir,
-        llm_model_func=create_llm_func(),
+        llm_model_func=create_llm_func(
+            system_prompt_hint_provider=system_prompt_hint_provider,
+        ),
         embedding_func=create_embed_func(),
     )
     await rag.initialize_storages()

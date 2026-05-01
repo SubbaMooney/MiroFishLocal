@@ -99,7 +99,9 @@ def patched_rag_factory(monkeypatch):
     from lightrag.kg.shared_storage import initialize_pipeline_status
     from lightrag.utils import EmbeddingFunc
 
-    async def _create_rag(working_dir: str):
+    async def _create_rag(working_dir: str, system_prompt_hint_provider=None):
+        # hint_provider wird in Phase 1 nicht verwendet, aber Signatur muss passen
+        # nachdem die Factory in Phase 2 erweitert wurde.
         embed = EmbeddingFunc(embedding_dim=1024, max_token_size=8192, func=_mock_embed_inner)
         rag = LightRAG(
             working_dir=working_dir,

@@ -24,6 +24,7 @@ Pflicht-Invariante (siehe lightrag_factory.create_rag):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
 import threading
@@ -38,6 +39,46 @@ logger = logging.getLogger(__name__)
 # Default-Timeout fuer kurze Reads/Queries; Inserts brauchen mehr Zeit.
 _DEFAULT_TIMEOUT_S = 120.0
 _INSERT_TIMEOUT_S = 600.0
+
+_ONTOLOGY_FILE = "ontology.json"
+
+
+def _format_ontology_hint(ontology: dict) -> str:
+    """Konvertiert eine Ontology-Definition in einen kompakten System-Prompt-Hint.
+
+    LightRAG kennt kein Schema, daher injizieren wir die Ontologie als
+    natuerlich-sprachlichen Hint, den der Extraktor beruecksichtigen soll.
+    Bewusst kompakt gehalten — der Hint geht in JEDEN LLM-Call dieser Instanz.
+    """
+    entity_lines: list[str] = []
+    for et in ontology.get("entity_types", []):
+        name = et.get("name", "")
+        desc = et.get("description", "")
+        if name:
+            entity_lines.append(f"  - {name}: {desc}" if desc else f"  - {name}")
+
+    edge_lines: list[str] = []
+    for ed in ontology.get("edge_types", []):
+        name = ed.get("name", "")
+        desc = ed.get("description", "")
+        targets = ed.get("source_targets", [])
+        target_str = ""
+        if targets:
+            pairs = [f"{t.get('source', '?')}->{t.get('target', '?')}" for t in targets]
+            target_str = f" ({', '.join(pairs)})"
+        if name:
+            edge_lines.append(
+                f"  - {name}{target_str}: {desc}" if desc else f"  - {name}{target_str}"
+            )
+
+    parts: list[str] = ["Knowledge Graph Schema Hint (prefer these when extracting):"]
+    if entity_lines:
+        parts.append("Entity types:")
+        parts.extend(entity_lines)
+    if edge_lines:
+        parts.append("Relation types:")
+        parts.extend(edge_lines)
+    return "\n".join(parts)
 
 
 class RagManager:
@@ -62,6 +103,8 @@ class RagManager:
 
         self._instances: dict[str, Any] = {}  # graph_id -> LightRAG
         self._instance_locks: dict[str, asyncio.Lock] = {}
+        # Pro-Graph Ontology-Hints (mutable; werden vom hint_provider live gelesen).
+        self._ontology_hints: dict[str, str] = {}
 
         # Langlebiger Loop in eigenem Daemon-Thread (siehe Pflicht-Invariante).
         self._loop = asyncio.new_event_loop()
@@ -125,7 +168,20 @@ class RagManager:
 
         working_dir = self._working_dir_base / graph_id
         working_dir.mkdir(parents=True, exist_ok=True)
-        rag = await lightrag_factory.create_rag(str(working_dir))
+
+        # Persistierte Ontologie aus vorherigem Run wiederherstellen, falls vorhanden.
+        ontology_path = working_dir / _ONTOLOGY_FILE
+        if graph_id not in self._ontology_hints and ontology_path.exists():
+            try:
+                ontology = json.loads(ontology_path.read_text(encoding="utf-8"))
+                self._ontology_hints[graph_id] = _format_ontology_hint(ontology)
+            except Exception:
+                logger.exception("Ontology-Restore fehlgeschlagen: %s", ontology_path)
+
+        rag = await lightrag_factory.create_rag(
+            str(working_dir),
+            system_prompt_hint_provider=lambda: self._ontology_hints.get(graph_id, ""),
+        )
         self._instances[graph_id] = rag
         self._instance_locks[graph_id] = asyncio.Lock()
         logger.info("LightRAG-Instanz erzeugt: graph_id=%s, dir=%s", graph_id, working_dir)
@@ -137,6 +193,31 @@ class RagManager:
     # ------------------------------------------------------------------
     # Public Sync-API
     # ------------------------------------------------------------------
+
+    def set_ontology(self, graph_id: str, ontology: dict) -> None:
+        """Registriert eine Ontologie als System-Prompt-Hint fuer diesen Graph.
+
+        Persistiert die Ontologie zusaetzlich als ``ontology.json`` im
+        working_dir, damit sie nach Prozess-Restart automatisch wiederhergestellt
+        wird (siehe ``_get_or_create``).
+
+        Kann VOR oder NACH dem ersten ``insert`` aufgerufen werden — der
+        hint_provider liest live aus ``self._ontology_hints``, daher greift
+        eine spaetere Aenderung sofort beim naechsten LLM-Call.
+        """
+        hint = _format_ontology_hint(ontology)
+        self._ontology_hints[graph_id] = hint
+
+        working_dir = self._working_dir_base / graph_id
+        working_dir.mkdir(parents=True, exist_ok=True)
+        (working_dir / _ONTOLOGY_FILE).write_text(
+            json.dumps(ontology, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.info("Ontology gesetzt: graph_id=%s, %d Entity-Types, %d Edge-Types",
+                    graph_id,
+                    len(ontology.get("entity_types", [])),
+                    len(ontology.get("edge_types", [])))
 
     def insert(self, graph_id: str, text: str) -> None:
         """Inserts text in den Graph (synchron, blockiert bis fertig)."""
@@ -189,6 +270,7 @@ class RagManager:
                 except Exception:  # pragma: no cover
                     logger.exception("finalize_storages fehlgeschlagen: %s", graph_id)
         self._run(_finalize())
+        self._ontology_hints.pop(graph_id, None)
 
         working_dir = self._working_dir_base / graph_id
         if working_dir.exists():
