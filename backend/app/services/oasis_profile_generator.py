@@ -21,7 +21,7 @@ from zep_cloud.client import Zep
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, get_locale, set_locale, t
-from .zep_entity_reader import EntityNode, ZepEntityReader
+from .entity_reader import EntityNode
 
 logger = get_logger('mirofish.oasis_profile')
 
