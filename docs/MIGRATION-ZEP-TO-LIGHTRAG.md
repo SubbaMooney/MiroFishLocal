@@ -67,9 +67,25 @@ flowchart TB
 | Phase 0 — Spike | erledigt (2026-04-30) | mock-spike grün | Go-Empfehlung |
 | Phase 1 — Foundation | erledigt (2026-05-01) | 9/9 grün | RagManager + Factory live |
 | Phase 2 — Indexing-Pfad | erledigt (2026-05-01) | 22/22 grün | graph_builder auf RagManager portiert; Polling-Phase entfernt; ZEP_API_KEY nicht mehr in Indexing-Pfad benoetigt |
-| Phase 3 — Search & Tools | offen | — | groesster API-Bruch (Tool-Output-Format) |
+| Phase 3 — Search & Tools | erledigt (2026-05-01) | 47/47 grün | Phase 3a: EntityReader (NetworkX) ersetzt ZepEntityReader. Phase 3b: LightRAGToolsService + InterviewToolService ersetzen ZepToolsService im report_agent |
 | Phase 4 — Profile + Memory-Updater | offen | — | Live-Memory-Updater ist Cost-Risiko |
 | Phase 5 — Cleanup & Tests | offen | — | Zep-Module endgueltig entfernen |
+
+## Anpassungen aus Phase 3 (Implementierung, 2026-05-01)
+
+Designentscheidungen, die im Plan nicht spezifiziert waren:
+
+1. **Aufteilung in 3a + 3b** — Phase 3 in zwei Sub-PRs gesplittet:
+   - 3a: ``entity_reader.py`` (NetworkX-Reads fuer Phase-4-Caller).
+   - 3b: ``lightrag_tools.py`` + ``interview_tool.py`` (LLM-Tool-Schicht).
+2. **Geteilter NetworkX-Mapper** — graph_builder + entity_reader + lightrag_tools brauchen denselben defensiven Schema-Mapper. Extrahiert nach ``services/_networkx_mapping.py`` (private Helfer-Modul). Neue Public-API: ``node_to_dict``, ``edge_to_dict``, ``map_nodes``, ``map_edges``.
+3. **Datei-Naming** — User-Wahl 2c: ``lightrag_tools.py`` (3 RAG-Tools) + ``interview_tool.py`` (OASIS-Interview, KEINE LightRAG-Dependency). Vorher Plan-konformer Name ``lightrag_tools.py`` wurde irrefuehrend, weil interview_agents OASIS-related ist.
+4. **panorama_search ohne Temporal-Split** — User-Wahl 3a: ``historical_facts=[]``, ``historical_count=0``. Schema bleibt erhalten, alle Treffer in ``active_facts``. ``include_expired``-Parameter bleibt nur fuer API-Kompat.
+5. **insight_forge mit ThreadPoolExecutor** — User-Wahl 4b: Sub-Queries laufen parallel ueber ``ThreadPoolExecutor(max_workers=5)``. Mehrere ``RagManager.query``-Coroutines werden auf den selben Loop dispatched, der sie konkurrierend abarbeitet. ``_safe_query``-Wrapper schluckt Sub-Query-Ausnahmen, damit ein Ausfall nicht das gesamte Aggregat killt.
+6. **interview_agents als Delegate** — ``LightRAGToolsService.interview_agents`` instantiiert lazy einen ``InterviewToolService`` und ruft ``interview_agents`` darauf auf. Damit muss der ``report_agent`` nicht zwei Service-Instanzen verwalten — nur Imports und Klassen-Referenzen aendern.
+7. **Auxiliary Reads** (``get_entities_by_type``, ``get_entity_summary``, ``get_graph_statistics``, ``get_simulation_context``) sind im Plan nicht erwaehnt, werden aber vom report_agent intern verwendet — alle auf NetworkX umgestellt, gleiche Signatur und Output-Schema.
+8. **``self.zep_tools``-Variablennamen bleiben** im report_agent (zeigt jetzt auf ``LightRAGToolsService``). Bewusst minimal-invasiv; Cleanup in Phase 5.
+9. **EntityReader.get_node_edges braucht jetzt graph_id** — minimaler API-Bruch vs. Zep-Variante. NetworkX hat keinen per-Knoten-Index wie Zep, daher muss die Instanz-ID mitgegeben werden. Einziger Caller (intern) wurde mitgezogen.
 
 ## Anpassungen aus Phase 2 (Implementierung, 2026-05-01)
 
