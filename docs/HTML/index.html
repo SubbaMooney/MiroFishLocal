@@ -104,6 +104,10 @@
       <a href="./SPIKE-LIGHTRAG-PHASE0.html">Spike-Report Phase 0 — LightRAG Mock-Spike (2026-04-30)</a>
       <span class="desc">Code-Bereitschafts-Spike mit gemockten LLM/Embedding-Funktionen. 7 von 7 Annahmen GREEN. Kritischer Befund: Loop-Bindung von <code>initialize_pipeline_status()</code>.</span>
     </li>
+    <li>
+      <a href="./AUDIT-CAMEL-OASIS-EGRESS.html">Audit camel-oasis &amp; camel-ai — Externer Netzwerk-Egress (2026-05-01)</a>
+      <span class="desc">Read-only Audit der installierten <code>oasis</code>- und <code>camel</code>-Libs auf versteckten Egress (Telemetrie, HuggingFace-Pulls, 3rd-Party-APIs). Verdikt: DEFANGED. Einziger aktiver Pfad: HF-Pull von <code>Twitter/twhin-bert-base</code> im Twitter-Recsys.</span>
+    </li>
   </ul>
 
   <h2>Quell-Dokumente (Markdown im Repo)</h2>
@@ -123,6 +127,10 @@
     <li>
       <a href="../SPIKE-LIGHTRAG-PHASE0.md"><code>docs/SPIKE-LIGHTRAG-PHASE0.md</code></a>
       <span class="desc">Quelle des Phase-0-Spike-Reports (Mock-Spike).</span>
+    </li>
+    <li>
+      <a href="../AUDIT-CAMEL-OASIS-EGRESS.md"><code>docs/AUDIT-CAMEL-OASIS-EGRESS.md</code></a>
+      <span class="desc">Quelle des camel-oasis-Egress-Audits.</span>
     </li>
     <li>
       <a href="../../README.md"><code>README.md</code></a>

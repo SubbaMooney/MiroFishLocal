@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MiroFish — Audit camel-oasis und camel-ai: Externe Netzwerk-Calls</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #58a6ff;
+    --card: #161b22;
+    --border: #30363d;
+    --warn: #d29922;
+    --good: #3fb950;
+    --bad:  #f85149;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --muted: #59636e;
+      --accent: #0969da;
+      --card: #f6f8fa;
+      --border: #d0d7de;
+      --warn: #9a6700;
+      --good: #1a7f37;
+      --bad:  #cf222e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 980px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  h1 {
+    font-size: 1.9em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4em;
+  }
+  h2 {
+    margin-top: 2em;
+    font-size: 1.3em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.2em;
+  }
+  h3 { margin-top: 1.6em; font-size: 1.05em; }
+  p, li { color: var(--fg); }
+  .meta { color: var(--muted); font-size: 0.92em; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.88em;
+    margin: 1em 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.45em 0.7em;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--card); }
+  tr:nth-child(even) td { background: rgba(127,127,127,0.04); }
+  code, pre {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  code { padding: 0.1em 0.4em; font-size: 0.92em; }
+  pre {
+    padding: 0.9em 1em;
+    overflow-x: auto;
+    font-size: 0.86em;
+    line-height: 1.5;
+  }
+  .verdict {
+    display: inline-block;
+    padding: 0.25em 0.7em;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.92em;
+    background: rgba(210,153,34,0.15);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+  }
+  .pill-ok   { color: var(--good); }
+  .pill-warn { color: var(--warn); }
+  .pill-bad  { color: var(--bad);  }
+  blockquote {
+    margin: 1em 0;
+    padding: 0.6em 1em;
+    border-left: 3px solid var(--accent);
+    background: var(--card);
+    color: var(--fg);
+  }
+  .mermaid { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 1em; margin: 1em 0; }
+  footer {
+    margin-top: 3em;
+    padding-top: 1em;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+  a { color: var(--accent); }
+</style>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? 'dark' : 'default', securityLevel: 'loose' });
+</script>
+</head>
+<body>
+<main>
+  <p class="meta"><a href="./index.html">&larr; zurück zum Index</a></p>
+
+  <h1>Audit camel-oasis und camel-ai: Externe Netzwerk-Calls</h1>
+  <p class="meta">Datum: 2026-05-01 · Scope: <code>camel-oasis 0.2.5</code> &amp; <code>camel-ai 0.2.78</code> in
+    <code>backend/.venv/lib/python3.12/site-packages/</code></p>
+
+  <h2>TL;DR</h2>
+  <p>Verdikt: <span class="verdict">DEFANGED</span></p>
+  <p>Beide Libs enthalten Egress-Quellen, aber die gefährlichsten Pfade
+    (camel-Toolkits mit Drittanbieter-APIs, AgentOps-Tracking, Discord-Bot,
+    HuggingFace-Datasets) werden von MiroFish nicht importiert. Eine einzige
+    reale Egress-Quelle bleibt: <strong>oasis lädt für
+    <code>DefaultPlatformType.TWITTER</code> beim ersten Lauf zwei
+    HuggingFace-Modelle</strong> (<code>Twitter/twhin-bert-base</code>,
+    <code>paraphrase-MiniLM-L6-v2</code>). Mit zwei Env-Variablen oder einem
+    Pre-Cache deaktivierbar; Reddit-Pfad ist sauber.</p>
+
+  <h2>Datenfluss-Übersicht</h2>
+  <div class="mermaid">
+flowchart LR
+    M[MiroFish backend] -- importiert --> CM[camel.models<br/>camel.types]
+    M -- importiert --> O[oasis]
+    M -. NICHT geladen .-> CT[camel.toolkits<br/>camel.bots<br/>camel.runtimes<br/>camel.embeddings<br/>camel.benchmarks<br/>camel.loaders<br/>camel.datahubs]
+    CM -->|LLM-Endpoint| L[(konfigurierter LLM<br/>z.B. Bailian / OpenAI)]
+    O -->|recsys=twhin-bert<br/>nur TWITTER| HF[(huggingface.co)]
+    O -->|recsys=reddit| NX[(kein Egress)]
+    classDef red fill:#5b2326,stroke:#f85149,color:#fff;
+    classDef gray fill:#2a2f37,stroke:#666,color:#bbb;
+    classDef green fill:#1d3a23,stroke:#3fb950,color:#fff;
+    class HF red;
+    class NX green;
+    class CT gray;
+  </div>
+
+  <h2>Findings-Tabelle</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Lib</th><th>Datei:Zeile</th><th>Kategorie</th><th>Default-aktiv?</th><th>Deaktivierbar</th><th>Trifft MiroFish?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>oasis</td><td><code>social_platform/recsys.py:68</code></td><td>Hub-Pull <code>Twitter/twhin-bert-base</code> Tokenizer</td><td class="pill-bad">Ja, wenn TWITTER-Env</td><td><code>HF_HUB_OFFLINE=1</code> + Pre-Cache</td><td class="pill-bad">JA (Twitter-Run)</td></tr>
+      <tr><td>2</td><td>oasis</td><td><code>social_platform/recsys.py:78</code></td><td>Hub-Pull <code>Twitter/twhin-bert-base</code> Model</td><td class="pill-bad">Ja, wenn TWITTER-Env</td><td><code>HF_HUB_OFFLINE=1</code> + Pre-Cache</td><td class="pill-bad">JA (Twitter-Run)</td></tr>
+      <tr><td>3</td><td>oasis</td><td><code>social_platform/recsys.py:87</code></td><td>Hub-Pull <code>paraphrase-MiniLM-L6-v2</code></td><td class="pill-warn">Nur bei <code>recsys_type="twitter"</code></td><td>Nicht aktivieren oder offline</td><td class="pill-ok">NEIN (twhin-bert ist gesetzt)</td></tr>
+      <tr><td>4</td><td>camel</td><td><code>utils/commons.py:598</code></td><td>AgentOps-Tracking</td><td class="pill-ok">NEIN (opt-in via <code>AGENTOPS_API_KEY</code>)</td><td>Variable nicht setzen</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>5</td><td>camel</td><td><code>models/{cohere,samba,reka,mistral}.py</code></td><td>AgentOps-Tracking</td><td class="pill-ok">NEIN</td><td>Variable nicht setzen</td><td class="pill-ok">NEIN (Modelle ungenutzt)</td></tr>
+      <tr><td>6</td><td>camel</td><td><code>utils/commons.py:126</code></td><td>HF-Datasets-Pull (camel-ai/metadata)</td><td class="pill-warn">Nur via <code>camel.benchmarks</code></td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>7</td><td>camel</td><td><code>toolkits/*.py</code></td><td>3rd-Party-APIs (Twitter, LinkedIn, Zapier, Discord, WeChat, DingTalk, WhatsApp, PubMed, Semantic Scholar, Wolfram, Jina, Meshy, Mineru, Search, WebDeploy, Pptx, Audio, Image)</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>8</td><td>camel</td><td><code>bots/discord/discord_app.py</code></td><td>Discord-API</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>9</td><td>camel</td><td><code>runtimes/{docker,remote_http}_runtime.py</code></td><td>localhost + remote-runtime</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>10</td><td>camel</td><td><code>models/sglang_model.py:449</code></td><td>sglang-Probe</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>11</td><td>camel</td><td><code>models/samba_model.py:412/643</code></td><td>SambaNova httpx</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>12</td><td>camel</td><td><code>models/gemini_model.py:99</code></td><td>Default-Endpoint <code>generativelanguage.googleapis.com</code></td><td class="pill-warn">Nur on-import</td><td><code>Config.LLM_BASE_URL</code> override</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>13</td><td>camel</td><td><code>models/anthropic_model.py:122</code></td><td>Default-Endpoint <code>api.anthropic.com</code></td><td class="pill-warn">Nur on-import</td><td><code>Config.LLM_BASE_URL</code> override</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>14</td><td>camel</td><td><code>embeddings/{jina,vlm}_embedding.py</code></td><td>API + HF-Pull</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>15</td><td>camel</td><td><code>loaders/{mineru,jina_url_reader,chunkr_reader}.py</code></td><td>3rd-Party-API</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>16</td><td>camel</td><td><code>datahubs/huggingface.py</code></td><td>HF-Hub-Auth/Pull</td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>17</td><td>camel</td><td><code>benchmarks/{gaia,nexus,apibench}.py</code></td><td>HF <code>snapshot_download</code></td><td class="pill-warn">Nur on-import</td><td>Nicht importieren</td><td class="pill-ok">NEIN</td></tr>
+      <tr><td>18</td><td>oasis</td><td><code>social_agent/agent_graph.py:28</code></td><td>Neo4j-Bolt-Driver</td><td class="pill-ok">NEIN (Default <code>igraph</code>)</td><td><code>Neo4jConfig=None</code> belassen</td><td class="pill-ok">NEIN</td></tr>
+    </tbody>
+  </table>
+  <p>Keine Treffer für <code>posthog</code>, <code>segment</code>,
+    <code>mixpanel</code>, <code>sentry_sdk</code>, <code>langsmith</code>,
+    <code>opentelemetry</code>, <code>wandb</code>, <code>mlflow</code>,
+    <code>weave</code>, <code>datadog</code>, <code>newrelic</code> in
+    <code>oasis/</code> oder <code>camel/</code>. Keine
+    <code>socket</code>-Verbindungen außer einem lokalen Port-Probe in
+    <code>camel/utils/commons.py:179</code>.</p>
+
+  <h2>Was MiroFish konkret aus den Libs importiert</h2>
+  <ul>
+    <li>aus <code>oasis</code>: <code>make</code>, <code>DefaultPlatformType</code>, <code>LLMAction</code>, <code>ManualAction</code>, <code>generate_*_agent_graph</code>, <code>SocialAgent</code>, <code>AgentGraph</code>, <code>print_db_contents</code></li>
+    <li>aus <code>camel</code>: ausschließlich <code>camel.models.ModelFactory</code> und <code>camel.types.ModelPlatformType</code>. <strong>Keine</strong> Toolkits, Bots, Runtimes, Embeddings, Benchmarks, Loaders, Datahubs.</li>
+  </ul>
+  <p>Folge: Der Großteil der camel-ai Egress-Vektoren ist toter Code, weil er
+    nicht geladen wird. Egress-Risiko aus camel-ai ist praktisch null, solange
+    niemand neue Imports einführt.</p>
+
+  <h2>Aktiver Egress-Pfad: oasis Twitter-Recsys</h2>
+  <p>Der Twitter-Run von MiroFish ruft (in
+    <code>backend/scripts/run_twitter_simulation.py:587</code> und
+    <code>run_parallel_simulation.py:1137</code>):</p>
+<pre><code>oasis.make(platform=oasis.DefaultPlatformType.TWITTER, ...)</code></pre>
+  <p>Das instanziiert in <code>oasis/environment/env.py:78</code> ein
+    <code>Platform</code> mit <code>recsys_type="twhin-bert"</code>. Beim
+    ersten Recsys-Refresh führt
+    <code>oasis/social_platform/recsys.py:64-79</code> aus:</p>
+<pre><code>AutoTokenizer.from_pretrained("Twitter/twhin-bert-base", model_max_length=512)
+AutoModel.from_pretrained("Twitter/twhin-bert-base").to(device)</code></pre>
+  <p><code>transformers</code> löst dabei standardmäßig
+    <code>huggingface.co/...</code> auf. Das ist der einzige bestätigte Egress
+    an einen Nicht-LLM-Endpoint, der in einem MiroFish-Run unter Default-Config
+    tatsächlich passiert. Beim Reddit-Run gibt es ihn nicht
+    (<code>recsys_type="reddit"</code> &rarr; keine Modell-Loads).</p>
+
+  <h2>Verdikt und Fix-Schritte</h2>
+  <p>Verdikt: <span class="verdict">DEFANGED</span> &mdash; akzeptabel zu
+    behalten, braucht aber drei sehr konkrete Härtungen.</p>
+
+  <h3>1. Modelle pre-cachen, dann offline gehen</h3>
+  <p>Einmal mit Internet:</p>
+<pre><code>python -c "from huggingface_hub import snapshot_download; snapshot_download('Twitter/twhin-bert-base')"
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-MiniLM-L6-v2')"</code></pre>
+  <p>Cache in das Image / das Volume persistieren, danach in der Container-Env
+    setzen:</p>
+<pre><code>HF_HUB_OFFLINE=1
+TRANSFORMERS_OFFLINE=1
+HF_DATASETS_OFFLINE=1</code></pre>
+
+  <h3>2. AgentOps explizit verbieten</h3>
+  <p>In <code>backend/app/config.py</code> einen Hard-Check einbauen, der
+    <code>AGENTOPS_API_KEY</code> aus <code>os.environ</code> löscht, falls
+    gesetzt. Andernfalls würde jede zukünftige Variable den Tracker scharf
+    schalten.</p>
+
+  <h3>3. Import-Whitelist via Test</h3>
+  <p>Smoke-Test: nach Import von <code>oasis</code> und
+    <code>camel.models</code> in <code>sys.modules</code> prüfen und
+    fehlschlagen, wenn <code>camel.toolkits</code>, <code>camel.bots</code>,
+    <code>camel.runtimes</code>, <code>camel.embeddings</code>,
+    <code>camel.benchmarks</code>, <code>camel.loaders</code>,
+    <code>camel.datahubs</code>, <code>agentops</code>, <code>posthog</code>,
+    <code>langsmith</code>, <code>wandb</code> oder <code>sentry_sdk</code>
+    geladen wurden.</p>
+
+  <h3>Optional</h3>
+  <ol>
+    <li><strong>Recsys auf RANDOM für Twitter</strong>: Custom-<code>Platform</code> mit <code>recsys_type="random"</code> (siehe <code>oasis/social_platform/platform.py:336</code>) eliminiert den lokalen Modell-Load, kostet aber Recsys-Qualität.</li>
+    <li><strong>Egress-Firewall im Container</strong>: docker-compose mit Bridge ohne Default-Route, Allowlist-Proxy nur auf den LLM-Endpoint.</li>
+  </ol>
+
+  <h2>Quellen-Tabelle (Roh-grep, gekürzt)</h2>
+<pre><code>oasis/social_platform/recsys.py:68: AutoTokenizer.from_pretrained("Twitter/twhin-bert-base", ...)
+oasis/social_platform/recsys.py:78: AutoModel.from_pretrained("Twitter/twhin-bert-base").to(device)
+oasis/social_platform/recsys.py:87: SentenceTransformer("paraphrase-MiniLM-L6-v2", cache_folder="./models")
+oasis/environment/env.py:81:        recsys_type="twhin-bert"
+oasis/social_agent/agent_graph.py:28: GraphDatabase.driver(...)  # nur wenn neo4j_config gesetzt
+camel/utils/commons.py:126:           requests.get("https://huggingface.co/datasets/camel-ai/...") # benchmarks-only
+camel/utils/commons.py:598:           if os.getenv("AGENTOPS_API_KEY") ...     # opt-in
+camel/models/anthropic_model.py:122:  default base_url "https://api.anthropic.com/v1/"
+camel/models/gemini_model.py:99:      default base_url "https://generativelanguage.googleapis.com/..."
+camel/toolkits/*:                     diverse 3rd-Party-APIs, alle on-import-only
+camel/bots/discord/*:                 Discord-API
+camel/runtimes/*:                     localhost + remote-runtime
+camel/embeddings/*:                   Jina/HF
+camel/benchmarks/*:                   HF snapshot_download</code></pre>
+
+  <footer>
+    Auto-generiert parallel zu <code>docs/AUDIT-CAMEL-OASIS-EGRESS.md</code> · Mermaid v11 · Layout passt sich an Light/Dark-Mode an.
+  </footer>
+</main>
+</body>
+</html>
