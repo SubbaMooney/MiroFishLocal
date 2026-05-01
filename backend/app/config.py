@@ -63,6 +63,32 @@ def _load_env_once() -> None:
 _load_env_once()
 
 
+def _harden_environment() -> None:
+    """Defensive Umgebungs-Haerten gegen versteckten Egress.
+
+    Siehe docs/AUDIT-CAMEL-OASIS-EGRESS.md (Verdikt: DEFANGED).
+
+    1. AGENTOPS_API_KEY: camel-ai's AgentOps-Integration aktiviert sich
+       automatisch sobald der Key in der Umgebung steht — egal aus welcher
+       Quelle. Wir loeschen ihn proaktiv, damit MiroFish nie versehentlich
+       Usage-Daten an agentops.ai schickt. User, die AgentOps explizit wollen,
+       muessen den Key NACH dem Backend-Start setzen oder diesen Pop entfernen.
+
+    2. HF_HUB_OFFLINE: oasis Twitter-Pfad versucht zur Laufzeit
+       AutoTokenizer/AutoModel.from_pretrained("Twitter/twhin-bert-base") aus
+       huggingface.co zu laden. Mit HF_HUB_OFFLINE=1 als Default scheitert ein
+       erster Aufruf mit klarer Fehlermeldung, statt heimlich Modelle aus dem
+       Netz zu ziehen. Der User muss vorher `python backend/scripts/precache_hf_models.py`
+       laufen lassen — siehe Skript fuer Details. setdefault, damit User mit
+       HF_HUB_OFFLINE=0 in der .env das Online-Verhalten zurueckholen kann.
+    """
+    os.environ.pop("AGENTOPS_API_KEY", None)
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+
+_harden_environment()
+
+
 class Config:
     """Flask配置类"""
 
