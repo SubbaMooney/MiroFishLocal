@@ -84,6 +84,22 @@ class Config:
     # Zep配置
     ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
 
+    # LightRAG / GraphRAG 配置 (Phase 1 Migration, parallel zu Zep — siehe
+    # docs/MIGRATION-ZEP-TO-LIGHTRAG.md). Alle Werte sind optional; Pflicht
+    # werden sie erst, wenn RagManager bzw. lightrag_factory aufgerufen wird.
+    LIGHTRAG_WORKING_DIR_BASE = os.environ.get(
+        'LIGHTRAG_WORKING_DIR_BASE',
+        os.path.join(os.path.dirname(__file__), '../uploads/lightrag'),
+    )
+    # Embedding-Provider — falls nicht separat gesetzt, fällt auf LLM_* zurück.
+    EMBED_API_KEY = os.environ.get('EMBED_API_KEY') or os.environ.get('LLM_API_KEY')
+    EMBED_BASE_URL = os.environ.get(
+        'EMBED_BASE_URL',
+        os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1'),
+    )
+    EMBED_MODEL_NAME = os.environ.get('EMBED_MODEL_NAME')
+    EMBED_DIM = int(os.environ.get('EMBED_DIM', '1024'))
+
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')
