@@ -16,12 +16,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from openai import OpenAI
-from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, get_locale, set_locale, t
-from .entity_reader import EntityNode
+from .entity_reader import EntityNode, EntityReader
 
 logger = get_logger('mirofish.oasis_profile')
 
@@ -179,12 +178,11 @@ class OasisProfileGenerator:
     ]
     
     def __init__(
-        self, 
+        self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
-        zep_api_key: Optional[str] = None,
-        graph_id: Optional[str] = None
+        graph_id: Optional[str] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
@@ -198,16 +196,10 @@ class OasisProfileGenerator:
             base_url=self.base_url
         )
         
-        # Zep客户端用于检索丰富上下文
-        self.zep_api_key = zep_api_key or Config.ZEP_API_KEY
-        self.zep_client = None
+        # Strukturierte Graph-Reads gehen ueber EntityReader (Phase 4 Migration);
+        # er sitzt auf dem RagManager-Singleton, kein Cloud-Client mehr.
         self.graph_id = graph_id
-        
-        if self.zep_api_key:
-            try:
-                self.zep_client = Zep(api_key=self.zep_api_key)
-            except Exception as e:
-                logger.warning(f"Zep客户端初始化失败: {e}")
+        self._reader: Optional[EntityReader] = None  # lazy
     
     def generate_profile_from_entity(
         self, 
@@ -284,132 +276,76 @@ class OasisProfileGenerator:
         return f"{username}_{suffix}"
     
     def _search_zep_for_entity(self, entity: EntityNode) -> Dict[str, Any]:
-        """
-        使用Zep图谱混合搜索功能获取实体相关的丰富信息
-        
-        Zep没有内置混合搜索接口，需要分别搜索edges和nodes然后合并结果。
-        使用并行请求同时搜索，提高效率。
-        
-        Args:
-            entity: 实体节点对象
-            
+        """Sammelt Edge-Facts + adjazente Knoten-Summaries fuer eine Entitaet.
+
+        Phase 4 Migration: vorher 2 parallele ``Zep.client.graph.search``
+        Calls (edges/nodes scope), jetzt ein einziger NetworkX-Read via
+        ``EntityReader.get_entity_with_context`` — keine Cloud-Roundtrip,
+        keine LLM-Calls, deutlich schneller.
+
+        Methodenname (mit "zep") bewusst beibehalten fuer minimal-invasiven
+        Diff; Cleanup in Phase 5.
+
         Returns:
-            包含facts, node_summaries, context的字典
+            Dict mit ``facts`` (Liste), ``node_summaries`` (Liste),
+            ``context`` (zusammengesetzter Text fuer LLM-Prompt).
         """
-        import concurrent.futures
-        
-        if not self.zep_client:
-            return {"facts": [], "node_summaries": [], "context": ""}
-        
-        entity_name = entity.name
-        
-        results = {
-            "facts": [],
-            "node_summaries": [],
-            "context": ""
-        }
-        
-        # 必须有graph_id才能进行搜索
+        empty: Dict[str, Any] = {"facts": [], "node_summaries": [], "context": ""}
         if not self.graph_id:
-            logger.debug(f"跳过Zep检索：未设置graph_id")
-            return results
-        
-        comprehensive_query = t('progress.zepSearchQuery', name=entity_name)
-        
-        def search_edges():
-            """搜索边（事实/关系）- 带重试机制"""
-            max_retries = 3
-            last_exception = None
-            delay = 2.0
-            
-            for attempt in range(max_retries):
-                try:
-                    return self.zep_client.graph.search(
-                        query=comprehensive_query,
-                        graph_id=self.graph_id,
-                        limit=30,
-                        scope="edges",
-                        reranker="rrf"
-                    )
-                except Exception as e:
-                    last_exception = e
-                    if attempt < max_retries - 1:
-                        logger.debug(f"Zep边搜索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中...")
-                        time.sleep(delay)
-                        delay *= 2
-                    else:
-                        logger.debug(f"Zep边搜索在 {max_retries} 次尝试后仍失败: {e}")
-            return None
-        
-        def search_nodes():
-            """搜索节点（实体摘要）- 带重试机制"""
-            max_retries = 3
-            last_exception = None
-            delay = 2.0
-            
-            for attempt in range(max_retries):
-                try:
-                    return self.zep_client.graph.search(
-                        query=comprehensive_query,
-                        graph_id=self.graph_id,
-                        limit=20,
-                        scope="nodes",
-                        reranker="rrf"
-                    )
-                except Exception as e:
-                    last_exception = e
-                    if attempt < max_retries - 1:
-                        logger.debug(f"Zep节点搜索第 {attempt + 1} 次失败: {str(e)[:80]}, 重试中...")
-                        time.sleep(delay)
-                        delay *= 2
-                    else:
-                        logger.debug(f"Zep节点搜索在 {max_retries} 次尝试后仍失败: {e}")
-            return None
-        
+            logger.debug("kein graph_id gesetzt -> ueberspringe Entity-Suche")
+            return empty
+
+        if self._reader is None:
+            self._reader = EntityReader()
+
+        entity_name = entity.name
         try:
-            # 并行执行edges和nodes搜索
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                edge_future = executor.submit(search_edges)
-                node_future = executor.submit(search_nodes)
-                
-                # 获取结果
-                edge_result = edge_future.result(timeout=30)
-                node_result = node_future.result(timeout=30)
-            
-            # 处理边搜索结果
-            all_facts = set()
-            if edge_result and hasattr(edge_result, 'edges') and edge_result.edges:
-                for edge in edge_result.edges:
-                    if hasattr(edge, 'fact') and edge.fact:
-                        all_facts.add(edge.fact)
-            results["facts"] = list(all_facts)
-            
-            # 处理节点搜索结果
-            all_summaries = set()
-            if node_result and hasattr(node_result, 'nodes') and node_result.nodes:
-                for node in node_result.nodes:
-                    if hasattr(node, 'summary') and node.summary:
-                        all_summaries.add(node.summary)
-                    if hasattr(node, 'name') and node.name and node.name != entity_name:
-                        all_summaries.add(f"相关实体: {node.name}")
-            results["node_summaries"] = list(all_summaries)
-            
-            # 构建综合上下文
-            context_parts = []
-            if results["facts"]:
-                context_parts.append("事实信息:\n" + "\n".join(f"- {f}" for f in results["facts"][:20]))
-            if results["node_summaries"]:
-                context_parts.append("相关实体:\n" + "\n".join(f"- {s}" for s in results["node_summaries"][:10]))
-            results["context"] = "\n\n".join(context_parts)
-            
-            logger.info(f"Zep混合检索完成: {entity_name}, 获取 {len(results['facts'])} 条事实, {len(results['node_summaries'])} 个相关节点")
-            
-        except concurrent.futures.TimeoutError:
-            logger.warning(f"Zep检索超时 ({entity_name})")
+            enriched = self._reader.get_entity_with_context(self.graph_id, entity.uuid)
         except Exception as e:
-            logger.warning(f"Zep检索失败 ({entity_name}): {e}")
-        
-        return results
+            logger.warning("EntityReader-Suche fehlgeschlagen (%s): %s", entity_name, e)
+            return empty
+
+        if enriched is None:
+            return empty
+
+        # Edge-Facts deduplizieren
+        facts = list({
+            edge["fact"] for edge in enriched.related_edges
+            if edge.get("fact")
+        })
+
+        # Adjazente Knoten als Summary-Liste (Summary + "相关实体: name")
+        summaries: set[str] = set()
+        for node in enriched.related_nodes:
+            summary = node.get("summary") or ""
+            if summary:
+                summaries.add(summary)
+            related_name = node.get("name") or ""
+            if related_name and related_name != entity_name:
+                summaries.add(f"相关实体: {related_name}")
+
+        node_summaries = list(summaries)
+
+        context_parts: List[str] = []
+        if facts:
+            context_parts.append(
+                "事实信息:\n" + "\n".join(f"- {f}" for f in facts[:20])
+            )
+        if node_summaries:
+            context_parts.append(
+                "相关实体:\n" + "\n".join(f"- {s}" for s in node_summaries[:10])
+            )
+
+        logger.info(
+            "Entity-Kontext: %s -> %d facts, %d nachbarn",
+            entity_name, len(facts), len(node_summaries),
+        )
+
+        return {
+            "facts": facts,
+            "node_summaries": node_summaries,
+            "context": "\n\n".join(context_parts),
+        }
     
     def _build_entity_context(self, entity: EntityNode) -> str:
         """
