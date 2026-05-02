@@ -68,8 +68,23 @@ flowchart TB
 | Phase 1 — Foundation | erledigt (2026-05-01) | 9/9 grün | RagManager + Factory live |
 | Phase 2 — Indexing-Pfad | erledigt (2026-05-01) | 22/22 grün | graph_builder auf RagManager portiert; Polling-Phase entfernt; ZEP_API_KEY nicht mehr in Indexing-Pfad benoetigt |
 | Phase 3 — Search & Tools | erledigt (2026-05-01) | 47/47 grün | Phase 3a: EntityReader (NetworkX) ersetzt ZepEntityReader. Phase 3b: LightRAGToolsService + InterviewToolService ersetzen ZepToolsService im report_agent |
-| Phase 4 — Profile + Memory-Updater | offen | — | Live-Memory-Updater ist Cost-Risiko |
-| Phase 5 — Cleanup & Tests | offen | — | Zep-Module endgueltig entfernen |
+| Phase 4 — Profile + Memory-Updater | erledigt (2026-05-03) | 19/19 grün | GraphMemoryUpdater (LightRAG + aggressives Throttling 60x) ersetzt ZepGraphMemoryUpdater. oasis_profile_generator._search_zep_for_entity nutzt jetzt EntityReader (kein LLM-Call). |
+| Phase 4.5 — Cost-Optimization | erledigt (2026-05-03) | 6/6 grün | chunk_token_size 1200->5000, gleaning 1->0, examples-drop. Echt-Spike: 2.1x weniger Cost im Mini-Korpus (extrapoliert ~10-100x bei 10MB-PDF) |
+| Phase 5 — Cleanup & Tests | offen | — | zep_tools.py / zep_entity_reader.py / zep_graph_memory_updater.py / utils/zep_paging.py loeschen + Config.ZEP_API_KEY-Pflicht entfernen |
+
+## Anpassungen aus Phase 4 + 4.5 (Implementierung, 2026-05-03)
+
+Designentscheidungen, die im Plan nicht spezifiziert waren:
+
+1. **Phase 4 + 4.5 in einem Rutsch** — User-Wahl „mache alles": Memory-Updater-Migration (4) und Cost-Optimization-Sprint (4.5) wurden gemeinsam durchgezogen, weil ohne 4.5 die Phase-4-Implementierung im Live-Memory-Pfad sofort unwirtschaftlich gewesen waere.
+2. **AgentActivity 1:1 portiert** — pure dataclass mit Episode-Text-Helpers, keine Zep-Dependencies. Kopiert in `graph_memory_updater.py` statt importiert, damit `zep_graph_memory_updater.py` in Phase 5 sauber loeschbar ist.
+3. **Throttling-Defaults aggressiv** — Config.GRAPH_MEMORY_BATCH_SIZE=50 (vorher hardcoded 5), GRAPH_MEMORY_SEND_INTERVAL=30s (vorher hardcoded 0.5s). 60× weniger Inserts vs. Zep-Default. Beide Werte ueber Env ueberschreibbar fuer Quality-Tests.
+4. **`_search_zep_for_entity` Methodenname beibehalten** — interne Methode, einziger Caller im selben File. Rename steht fuer Phase 5 an. Kein Breaking-Change.
+5. **EntityReader statt ThreadPool-Search** — vorher 2 parallele `Zep.client.graph.search` Calls (edges + nodes scope). Jetzt 1 NetworkX-Read via `EntityReader.get_entity_with_context`. Keine LLM-Calls, keine Cloud-Roundtrip, keine Retries noetig — Latenz ~10–50× besser.
+6. **`OasisProfileGenerator.__init__` ohne `zep_api_key`** — Param entfernt (war ungenutzt von Callern). Phase 5 wird `Config.ZEP_API_KEY` aus `validate()` entfernen.
+7. **PROMPTS-Examples-Drop ist Process-Wide** — `_apply_prompts_optimization` mutiert `lightrag.prompt.PROMPTS` einmalig pro Prozess (idempotent). Risiko: LLM-Output-Format-Stabilitaet kann leiden, deshalb `LIGHTRAG_DROP_EXAMPLES=false` als Notbremse.
+8. **Spike-Script-Drift** — `lightrag_real_spike.py` hatte seinen eigenen RagManager mit hardcoded LightRAG-Defaults. Mussten die Cost-Knobs dort spiegeln, sonst wuerde der Spike die Production-Realitaet nicht messen. Lesson fuer Phase 5: Spike-Skripte sollten Production-Code reusen statt reimplementieren.
+9. **GraphMemoryManager.reset_for_test** — neuer Test-Helper, weil der `_stop_all_done`-Flag in der Zep-Variante zwischen Tests nicht zurueckgesetzt wird (verursacht State-Leaks bei Tests, die `stop_all` aufrufen).
 
 ## Anpassungen aus Phase 3 (Implementierung, 2026-05-01)
 
