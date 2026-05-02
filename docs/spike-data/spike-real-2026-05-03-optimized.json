@@ -1,0 +1,89 @@
+{
+  "config": {
+    "llm_model": "gpt-4o-mini",
+    "embed_model": "text-embedding-3-small",
+    "llm_base_url": "https://api.openai.com/v1"
+  },
+  "cost_final": {
+    "cap_usd": 0.1,
+    "spent_usd": 0.003981,
+    "remaining_usd": 0.09602,
+    "llm_calls": 4,
+    "llm_input_tokens": 3234,
+    "llm_output_tokens": 677,
+    "embedding_calls": 17,
+    "embedding_tokens": 393,
+    "blocked_calls": 0
+  },
+  "results": [
+    {
+      "name": "T1: Embedding-Format",
+      "status": "PASS",
+      "detail": "shape=(2, 1536), norms in [1.000, 1.000], l2_normed=True",
+      "duration_s": 0.356,
+      "cost_snapshot": {
+        "cap_usd": 0.1,
+        "spent_usd": 1e-06,
+        "remaining_usd": 0.1,
+        "llm_calls": 0,
+        "llm_input_tokens": 0,
+        "llm_output_tokens": 0,
+        "embedding_calls": 1,
+        "embedding_tokens": 5,
+        "blocked_calls": 0
+      }
+    },
+    {
+      "name": "T2: LLM-Roundtrip",
+      "status": "PASS",
+      "detail": "output='PING'",
+      "duration_s": 0.914,
+      "cost_snapshot": {
+        "cap_usd": 0.1,
+        "spent_usd": 1.6e-05,
+        "remaining_usd": 0.099984,
+        "llm_calls": 1,
+        "llm_input_tokens": 17,
+        "llm_output_tokens": 1,
+        "embedding_calls": 1,
+        "embedding_tokens": 5,
+        "blocked_calls": 0
+      }
+    },
+    {
+      "name": "T3: Mini-Insert",
+      "status": "PASS",
+      "detail": "corpus_bytes=280, llm_calls=1, embed_calls=15, projected_llm_calls_per_10mb=37449 (UEBER Limit)",
+      "duration_s": 10.346,
+      "cost_snapshot": {
+        "cap_usd": 0.1,
+        "spent_usd": 0.002271,
+        "remaining_usd": 0.097729,
+        "llm_calls": 2,
+        "llm_input_tokens": 1412,
+        "llm_output_tokens": 552,
+        "embedding_calls": 16,
+        "embedding_tokens": 378,
+        "blocked_calls": 0
+      }
+    },
+    {
+      "name": "T4: Mini-Query (hybrid)",
+      "status": "PASS",
+      "detail": "len=428, excerpt='Alice arbeitet eng mit Bob zusammen, der der Product Owner bei Acme Corp ist. Bob berichtet an Carol, die als CTO fungie'",
+      "duration_s": 2.845,
+      "cost_snapshot": {
+        "cap_usd": 0.1,
+        "spent_usd": 0.003981,
+        "remaining_usd": 0.09602,
+        "llm_calls": 4,
+        "llm_input_tokens": 3234,
+        "llm_output_tokens": 677,
+        "embedding_calls": 17,
+        "embedding_tokens": 393,
+        "blocked_calls": 0
+      }
+    }
+  ],
+  "verdict": "GO (alle Tests PASS)"
+}
