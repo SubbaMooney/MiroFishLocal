@@ -143,6 +143,15 @@ class Config:
     # bei Quality-Issues auf 'false' setzen.
     LIGHTRAG_DROP_EXAMPLES = os.environ.get('LIGHTRAG_DROP_EXAMPLES', 'true').lower() in ('1', 'true', 'yes')
 
+    # Graph-Memory-Updater Throttling (Phase 4 Migration). Vorher hardcoded
+    # in zep_graph_memory_updater (BATCH_SIZE=5, SEND_INTERVAL=0.5s) — bei
+    # Zep war das billig, bei LightRAG entspricht jedes Insert einer vollen
+    # LLM-Extraktion. Aggressive Defaults senken die Insert-Rate ~60x:
+    #   - 0.5s/5  = 600 Activities/min/Plattform
+    #   - 30s/50  =  100 Activities/min/Plattform (gepuffert in groesseren Batches)
+    GRAPH_MEMORY_BATCH_SIZE = int(os.environ.get('GRAPH_MEMORY_BATCH_SIZE', '50'))
+    GRAPH_MEMORY_SEND_INTERVAL = float(os.environ.get('GRAPH_MEMORY_SEND_INTERVAL', '30.0'))
+
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')

@@ -317,10 +317,19 @@ class RagManager:
             return self._instances[graph_id]
         working_dir = self._working_dir_base / graph_id
         working_dir.mkdir(parents=True, exist_ok=True)
+        # Cost-Optimization-Knobs (Phase 4.5, mirrored from production
+        # lightrag_factory.create_rag) — sonst spiegelt der Spike die
+        # Default-LightRAG-Kosten wider, nicht die Production-Realitaet.
+        from lightrag.prompt import PROMPTS
+        PROMPTS["entity_extraction_examples"] = []
         rag = LightRAG(
             working_dir=str(working_dir),
             llm_model_func=self._llm_func,
             embedding_func=self._embed_func,
+            chunk_token_size=5000,
+            chunk_overlap_token_size=200,
+            entity_extract_max_gleaning=0,
+            max_extract_input_tokens=8000,
         )
         await rag.initialize_storages()
         await initialize_pipeline_status()
