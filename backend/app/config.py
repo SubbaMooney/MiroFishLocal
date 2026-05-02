@@ -126,14 +126,34 @@ class Config:
     EMBED_MODEL_NAME = os.environ.get('EMBED_MODEL_NAME')
     EMBED_DIM = int(os.environ.get('EMBED_DIM', '1024'))
 
+    # LightRAG Cost-Optimization Knobs (siehe docs/MIGRATION-ZEP-TO-LIGHTRAG.md
+    # Phase 4.5 Optimization-Sprint). Defaults sind auf "kosten-optimiert"
+    # gesetzt — basierend auf Echt-Spike 2026-05-03 (gpt-4o-mini lieferte
+    # 74.898 Calls/10MB mit LightRAG-Defaults; mit diesen Werten ~10-20x weniger).
+    LIGHTRAG_CHUNK_TOKEN_SIZE = int(os.environ.get('LIGHTRAG_CHUNK_TOKEN_SIZE', '5000'))
+    LIGHTRAG_CHUNK_OVERLAP_TOKEN_SIZE = int(
+        os.environ.get('LIGHTRAG_CHUNK_OVERLAP_TOKEN_SIZE', '200')
+    )
+    LIGHTRAG_MAX_GLEANING = int(os.environ.get('LIGHTRAG_MAX_GLEANING', '0'))
+    LIGHTRAG_MAX_EXTRACT_INPUT_TOKENS = int(
+        os.environ.get('LIGHTRAG_MAX_EXTRACT_INPUT_TOKENS', '8000')
+    )
+    # Few-Shot-Examples im Extraktions-Prompt rauswerfen (groesster
+    # Token-Overhead, ~2.5-3k Tokens pro Call). Risiko: Output-Format-Stabilitaet —
+    # bei Quality-Issues auf 'false' setzen.
+    LIGHTRAG_DROP_EXAMPLES = os.environ.get('LIGHTRAG_DROP_EXAMPLES', 'true').lower() in ('1', 'true', 'yes')
+
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')
     ALLOWED_EXTENSIONS = {'pdf', 'md', 'txt', 'markdown'}
 
     # 文本处理配置
-    DEFAULT_CHUNK_SIZE = 500  # 默认切块大小
-    DEFAULT_CHUNK_OVERLAP = 50  # 默认重叠大小
+    # 默认切块大小 — angepasst fuer LightRAG-Cost (siehe LIGHTRAG_CHUNK_TOKEN_SIZE
+    # oben). Bei 5000 Zeichen MiroFish-Chunk wird LightRAG i.d.R. nicht
+    # nochmal sub-chunken, d.h. 1 Extraktions-Call pro MiroFish-Chunk.
+    DEFAULT_CHUNK_SIZE = int(os.environ.get('DEFAULT_CHUNK_SIZE', '5000'))
+    DEFAULT_CHUNK_OVERLAP = int(os.environ.get('DEFAULT_CHUNK_OVERLAP', '200'))
 
     # OASIS模拟配置
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))

@@ -153,6 +153,29 @@ def create_embed_func(
     return EmbeddingFunc(embedding_dim=embed_dim, max_token_size=max_token_size, func=_embed)
 
 
+_PROMPTS_PATCHED = False
+
+
+def _apply_prompts_optimization() -> None:
+    """Idempotent: leert ``PROMPTS["entity_extraction_examples"]`` einmalig
+    pro Prozess, wenn ``Config.LIGHTRAG_DROP_EXAMPLES`` aktiv ist.
+
+    Hintergrund (siehe Phase-4.5-Recherche): Die Default-Examples machen
+    ~2.5-3k Tokens pro Extraktions-Call aus — der groesste Einzelposten
+    im Prompt-Overhead. Risiko: LLM-Output-Format-Stabilitaet kann leiden.
+    Bei Quality-Issues `LIGHTRAG_DROP_EXAMPLES=false` setzen.
+
+    Modul-Mutation ist process-wide; kein Sub-Set von Instanzen kann
+    abweichen. Das ist OK fuer MiroFish (1 Prozess pro Service).
+    """
+    global _PROMPTS_PATCHED
+    if _PROMPTS_PATCHED or not Config.LIGHTRAG_DROP_EXAMPLES:
+        return
+    from lightrag.prompt import PROMPTS
+    PROMPTS["entity_extraction_examples"] = []
+    _PROMPTS_PATCHED = True
+
+
 async def create_rag(
     working_dir: str,
     system_prompt_hint_provider: Optional[Callable[[], str]] = None,
@@ -167,9 +190,17 @@ async def create_rag(
 
     ``system_prompt_hint_provider`` wird durchgereicht an ``create_llm_func``
     und ist die Schnittstelle fuer ``RagManager.set_ontology`` — Phase-2-Migration.
+
+    Cost-Optimization-Knobs (Phase 4.5, siehe ``Config.LIGHTRAG_*``):
+      - ``chunk_token_size``: groessere Chunks = weniger Calls
+      - ``entity_extract_max_gleaning``: 0 = Single-Pass (Default-LightRAG: 1)
+      - ``max_extract_input_tokens``: Safety-Cap fuer grosse Chunks
+      - Examples-Drop: ueber ``_apply_prompts_optimization`` (process-wide)
     """
     from lightrag import LightRAG
     from lightrag.kg.shared_storage import initialize_pipeline_status
+
+    _apply_prompts_optimization()
 
     rag = LightRAG(
         working_dir=working_dir,
@@ -177,6 +208,10 @@ async def create_rag(
             system_prompt_hint_provider=system_prompt_hint_provider,
         ),
         embedding_func=create_embed_func(),
+        chunk_token_size=Config.LIGHTRAG_CHUNK_TOKEN_SIZE,
+        chunk_overlap_token_size=Config.LIGHTRAG_CHUNK_OVERLAP_TOKEN_SIZE,
+        entity_extract_max_gleaning=Config.LIGHTRAG_MAX_GLEANING,
+        max_extract_input_tokens=Config.LIGHTRAG_MAX_EXTRACT_INPUT_TOKENS,
     )
     await rag.initialize_storages()
     await initialize_pipeline_status()
