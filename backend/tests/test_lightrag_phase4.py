@@ -6,7 +6,7 @@ Validiert:
   - GraphMemoryUpdater throttling-Defaults aus Config
   - Batch-Insert via RagManager (gemockt)
   - GraphMemoryManager classmethods (Lifecycle)
-  - OasisProfileGenerator._search_zep_for_entity nutzt EntityReader, nicht Zep
+  - OasisProfileGenerator._search_graph_for_entity nutzt EntityReader, nicht Zep
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ def test_manager_get_all_stats(mock_rag):
 
 
 # ---------------------------------------------------------------------------
-# OasisProfileGenerator._search_zep_for_entity (jetzt EntityReader-basiert)
+# OasisProfileGenerator._search_graph_for_entity (jetzt EntityReader-basiert)
 # ---------------------------------------------------------------------------
 
 
@@ -235,7 +235,7 @@ def test_profile_search_returns_empty_without_graph_id(mock_rag, monkeypatch):
 
     gen = OasisProfileGenerator(api_key="dummy", graph_id=None)
     entity = EntityNode(uuid="alice", name="alice", labels=["PERSON"], summary="", attributes={})
-    result = gen._search_zep_for_entity(entity)
+    result = gen._search_graph_for_entity(entity)
     assert result == {"facts": [], "node_summaries": [], "context": ""}
 
 
@@ -265,7 +265,7 @@ def test_profile_search_uses_entity_reader(mock_rag, monkeypatch):
 
     gen = OasisProfileGenerator(api_key="dummy", graph_id="g1")
     entity = EntityNode(uuid="alice", name="alice", labels=["PERSON"], summary="", attributes={})
-    result = gen._search_zep_for_entity(entity)
+    result = gen._search_graph_for_entity(entity)
 
     fake_reader.get_entity_with_context.assert_called_once_with("g1", "alice")
     assert "alice arbeitet bei acme" in result["facts"]
@@ -291,7 +291,7 @@ def test_profile_search_handles_unknown_entity(mock_rag, monkeypatch):
 
     gen = OasisProfileGenerator(api_key="dummy", graph_id="g1")
     entity = EntityNode(uuid="ghost", name="ghost", labels=["?"], summary="", attributes={})
-    result = gen._search_zep_for_entity(entity)
+    result = gen._search_graph_for_entity(entity)
     assert result == {"facts": [], "node_summaries": [], "context": ""}
 
 

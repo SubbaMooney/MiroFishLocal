@@ -942,13 +942,15 @@ def search_graph_tool():
                 "error": t('api.requireGraphIdAndQuery')
             }), 400
         
-        from ..services.zep_tools import ZepToolsService
-        
-        tools = ZepToolsService()
-        result = tools.search_graph(
+        from ..services.lightrag_tools import LightRAGToolsService
+
+        tools = LightRAGToolsService()
+        # search_graph existiert nach Phase 3 nicht mehr; quick_search ist der
+        # naechste Aequivalenztreffer (Single-Shot Hybrid-Search via RagManager).
+        result = tools.quick_search(
             graph_id=graph_id,
             query=query,
-            limit=limit
+            limit=limit,
         )
         
         return jsonify({
@@ -985,9 +987,9 @@ def get_graph_statistics_tool():
                 "error": t('api.requireGraphId')
             }), 400
         
-        from ..services.zep_tools import ZepToolsService
-        
-        tools = ZepToolsService()
+        from ..services.lightrag_tools import LightRAGToolsService
+
+        tools = LightRAGToolsService()
         result = tools.get_graph_statistics(graph_id)
         
         return jsonify({

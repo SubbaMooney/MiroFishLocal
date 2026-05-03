@@ -275,7 +275,7 @@ class OasisProfileGenerator:
         suffix = random.randint(100, 999)
         return f"{username}_{suffix}"
     
-    def _search_zep_for_entity(self, entity: EntityNode) -> Dict[str, Any]:
+    def _search_graph_for_entity(self, entity: EntityNode) -> Dict[str, Any]:
         """Sammelt Edge-Facts + adjazente Knoten-Summaries fuer eine Entitaet.
 
         Phase 4 Migration: vorher 2 parallele ``Zep.client.graph.search``
@@ -409,7 +409,7 @@ class OasisProfileGenerator:
                 context_parts.append("### 关联实体信息\n" + "\n".join(related_info))
         
         # 4. 使用Zep混合检索获取更丰富的信息
-        zep_results = self._search_zep_for_entity(entity)
+        zep_results = self._search_graph_for_entity(entity)
         
         if zep_results.get("facts"):
             # 去重：排除已存在的事实

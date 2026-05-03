@@ -107,10 +107,7 @@ class Config:
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
 
-    # Zep配置
-    ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
-
-    # LightRAG / GraphRAG 配置 (Phase 1 Migration, parallel zu Zep — siehe
+    # LightRAG / GraphRAG 配置 (Phase 1-5 Migration komplett — siehe
     # docs/MIGRATION-ZEP-TO-LIGHTRAG.md). Alle Werte sind optional; Pflicht
     # werden sie erst, wenn RagManager bzw. lightrag_factory aufgerufen wird.
     LIGHTRAG_WORKING_DIR_BASE = os.environ.get(
@@ -203,8 +200,6 @@ class Config:
             )
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
-        if not cls.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY 未配置")
         # 错误时附带 .env 加载来源，方便定位
         if errors:
             errors.append(f"配置加载来源: {cls.env_source()}")
