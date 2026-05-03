@@ -309,6 +309,7 @@ flowchart LR
 <p><code>backend/app/__init__.py:43,66-69</code></p>
 <p>Sämtliche <code>/api/graph/*</code>, <code>/api/simulation/*</code>, <code>/api/report/*</code> Endpunkte ohne Auth. Jeder anonyme Aufrufer kann Projekte erstellen/löschen, Graphen löschen (<code>graph.py:597</code>), Simulationen starten/stoppen (<code>simulation.py:1451,1644</code>), Berichte löschen (<code>report.py:444</code>), Subprozesse spawnen, Zep-Daten leaken.</p>
 <p><strong>Fix</strong>: Auth-Middleware (Flask-Login + API-Key/JWT) im <code>before_request</code>-Hook; Resource-Ownership via <code>project_id</code>-Scoping prüfen.</p>
+<p><strong>Status</strong>: Behoben seit <code>dc85ea3</code> (Merge <code>674cebd</code>). Pflicht-ENV <code>MIROFISH_API_KEY</code> (&gt;=32 Zeichen), <code>before_request</code>-Hook in <code>backend/app/__init__.py</code> mit <code>hmac.compare_digest</code>, Ausnahmen <code>/health</code> und CORS-Preflight. Frontend-Axios-Interceptor setzt <code>X-API-Key</code> aus <code>VITE_MIROFISH_API_KEY</code>. Tests in <code>backend/tests/test_auth_middleware.py</code>. Resource-Ownership-Scoping (project_id-ACL) bleibt offen — siehe H3.</p>
 </div>
 
 <div class="finding crit">
@@ -328,6 +329,7 @@ app.run(host=host, port=port, debug=debug, threaded=True)</code></pre>
 <pre><code>CORS(app, resources={r"/api/*": {"origins": "*"}})</code></pre>
 <p>Jede Webseite, die der User parallel im Browser hat, kann <code>POST</code>/<code>DELETE</code>-Requests gegen die API schicken. In Verbindung mit C1: vollständige Daten-Exfiltration und -Vernichtung möglich.</p>
 <p><strong>Fix</strong>: <code>CORS_ORIGINS</code> als ENV mit konkreter Frontend-Domain-Whitelist.</p>
+<p><strong>Status</strong>: Behoben seit <code>deff271</code> (Merge <code>de48851</code>). <code>Config.CORS_ALLOWED_ORIGINS</code> (kommagetrennt, Default <code>http://localhost:3000,http://127.0.0.1:3000</code>); <code>Config.validate()</code> lehnt leere Listen und <code>*</code> explizit ab. Tests in <code>backend/tests/test_cors.py</code>.</p>
 </div>
 
 <div class="finding crit">
@@ -361,6 +363,7 @@ app.run(host=host, port=port, debug=debug, threaded=True)</code></pre>
   </tbody>
 </table>
 <p><strong>Fix</strong> — zentrale Validator-Util mit Regex <code>^(proj|sim|report|task)_[a-f0-9]{8,32}$</code> plus <code>os.path.realpath</code>-Check gegen erlaubtes Root.</p>
+<p><strong>Status</strong>: Behoben seit <code>e337853</code> (Merge <code>de48851</code>). <code>backend/app/utils/safe_id.py</code> mit <code>safe_id</code>, <code>safe_path_under</code> (realpath-anker gegen Symlink-Escape) und <code>safe_filename</code>. Angewandt auf alle 6 Touchpoints: <code>simulation.py</code> (posts/comments/config-download), <code>models/project.py</code> (<code>_get_project_dir</code> + <code>delete_project</code>), <code>services/report_agent.py</code> (<code>ReportManager._get_report_folder</code>), <code>services/simulation_runner.py</code> (<code>start_simulation</code> config_path). Tests in <code>backend/tests/test_path_traversal.py</code> (43 Tests inkl. Symlink-Escape).</p>
 </div>
 
 <div class="finding crit">
@@ -507,17 +510,18 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <h2 id="priorities">Top-10-Fix-Reihenfolge</h2>
 
 <ol>
-  <li><strong>C2</strong> — <code>FLASK_DEBUG</code> Default auf <code>False</code>. Eine Zeile, eliminiert RCE-Risiko sofort.</li>
+  <li><strong>C2</strong> — <code>FLASK_DEBUG</code> Default auf <code>False</code>. Eine Zeile, eliminiert RCE-Risiko sofort. <em>(Behoben)</em></li>
   <li><strong>C7</strong> — Docker non-root + Loopback-Bind. Verteidigung in Tiefe.</li>
-  <li><strong>C6</strong> — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden.</li>
-  <li><strong>C3</strong> — CORS auf Whitelist beschränken.</li>
+  <li><strong>C6</strong> — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden. <em>(Behoben — <code>e337853</code>)</em></li>
+  <li><strong>C3</strong> — CORS auf Whitelist beschränken. <em>(Behoben — <code>deff271</code>)</em></li>
   <li><strong>H1</strong> — <code>marked</code> + <code>DOMPurify</code> im Frontend, alle <code>v-html</code>/<code>innerHTML</code>-Stellen umstellen.</li>
-  <li><strong>C5</strong> — Globaler <code>errorhandler</code>, alle <code>traceback.format_exc()</code> aus Responses entfernen.</li>
-  <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>).</li>
-  <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>.</li>
+  <li><strong>C5</strong> — Globaler <code>errorhandler</code>, alle <code>traceback.format_exc()</code> aus Responses entfernen. <em>(Behoben)</em></li>
+  <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>). <em>(Behoben — <code>dc85ea3</code>)</em></li>
+  <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>. <em>(Behoben)</em></li>
   <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>.</li>
   <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig.</li>
 </ol>
+<p><strong>Stand 2026-05-03 (nach Stream A+B)</strong>: 11 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H3, H4, H5, H6, H7, H8, H9.</p>
 
 <h2 id="quickwin">Was du sofort tun kannst (5 Minuten, hoher Impact)</h2>
 

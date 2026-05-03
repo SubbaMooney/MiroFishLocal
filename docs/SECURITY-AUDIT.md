@@ -86,6 +86,8 @@ Sämtliche `/api/graph/*`, `/api/simulation/*`, `/api/report/*` Endpunkte ohne A
 
 **Fix**: Auth-Middleware (Flask-Login + API-Key/JWT) im `before_request`-Hook; Resource-Ownership via `project_id`-Scoping prüfen.
 
+**Status**: Behoben seit `dc85ea3` (Merge `674cebd`). Pflicht-ENV `MIROFISH_API_KEY` (>=32 Zeichen), `before_request`-Hook in `backend/app/__init__.py` mit `hmac.compare_digest`, Ausnahmen `/health` und CORS-Preflight. Frontend-Axios-Interceptor setzt `X-API-Key` aus `VITE_MIROFISH_API_KEY`. Tests in `backend/tests/test_auth_middleware.py`. Resource-Ownership-Scoping (project_id-ACL) bleibt offen — siehe H3.
+
 #### C2 — Werkzeug-Debugger-RCE durch Default `FLASK_DEBUG=True` + `0.0.0.0`-Binding
 `backend/app/config.py:71` + `backend/run.py:42-46`
 
@@ -115,6 +117,8 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 Jede Webseite, die der User parallel im Browser hat, kann `POST`/`DELETE`-Requests gegen die API schicken. In Verbindung mit C1: vollständige Daten-Exfiltration und -Vernichtung möglich.
 
 **Fix**: `CORS_ORIGINS` als ENV mit konkreter Frontend-Domain-Whitelist.
+
+**Status**: Behoben seit `deff271` (Merge `de48851`). `Config.CORS_ALLOWED_ORIGINS` (kommagetrennt, Default `http://localhost:3000,http://127.0.0.1:3000`); `Config.validate()` lehnt leere Listen und `*` explizit ab. Tests in `backend/tests/test_cors.py`.
 
 #### C4 — Hardcoded `SECRET_KEY`-Fallback
 `backend/app/config.py:70`
@@ -160,6 +164,8 @@ def safe_id(value: str) -> str:
     return value
 ```
 Plus `os.path.realpath`-Check gegen erlaubtes Root nach jedem `os.path.join(BASE, user_id)`.
+
+**Status**: Behoben seit `e337853` (Merge `de48851`). `backend/app/utils/safe_id.py` mit `safe_id`, `safe_path_under` (realpath-anker gegen Symlink-Escape) und `safe_filename`. Angewandt auf alle 6 Touchpoints: `simulation.py` (posts/comments/config-download), `models/project.py` (`_get_project_dir` + `delete_project`), `services/report_agent.py` (`ReportManager._get_report_folder`), `services/simulation_runner.py` (`start_simulation` config_path). Tests in `backend/tests/test_path_traversal.py` (43 Tests inkl. Symlink-Escape).
 
 #### C7 — Docker-Container läuft als root + bindet `0.0.0.0` ohne Schutz
 `Dockerfile:1` (`FROM python:3.11` ohne `USER`-Direktive) + `docker-compose.yml:1-13` (kein `cap_drop`, `read_only`, `security_opt`, `user`).
@@ -345,16 +351,18 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 
 ## Top-10-Fix-Reihenfolge (Empfehlung)
 
-1. **C2** — `FLASK_DEBUG` Default auf `False`. Eine Zeile, eliminiert RCE-Risiko sofort.
+1. **C2** — `FLASK_DEBUG` Default auf `False`. Eine Zeile, eliminiert RCE-Risiko sofort. *(Behoben)*
 2. **C7** — Docker non-root + Loopback-Bind. Verteidigung-in-Tiefe.
-3. **C6** — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden.
-4. **C3** — CORS auf Whitelist beschränken.
+3. **C6** — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden. *(Behoben — `e337853`)*
+4. **C3** — CORS auf Whitelist beschränken. *(Behoben — `deff271`)*
 5. **H1** — `marked` + `DOMPurify` im Frontend, alle `v-html`/`innerHTML`-Stellen umstellen.
-6. **C5** — Globaler `errorhandler`, alle `traceback.format_exc()` aus Responses entfernen.
-7. **C1** — Auth-Layer (mind. API-Key-Header in `before_request`).
-8. **C4** — `SECRET_KEY`-Default entfernen, Pflicht in `validate()`.
+6. **C5** — Globaler `errorhandler`, alle `traceback.format_exc()` aus Responses entfernen. *(Behoben)*
+7. **C1** — Auth-Layer (mind. API-Key-Header in `before_request`). *(Behoben — `dc85ea3`)*
+8. **C4** — `SECRET_KEY`-Default entfernen, Pflicht in `validate()`. *(Behoben)*
 9. **H6** — `flask-limiter` für `/generate`, `/build`, `/start`, `/chat`.
 10. **H2 + H4** — Tool-Call-Allow-List + `chat_history` server-seitig.
+
+**Stand 2026-05-03 (nach Stream A+B)**: 11 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H3, H4, H5, H6, H7, H8, H9.
 
 ---
 
