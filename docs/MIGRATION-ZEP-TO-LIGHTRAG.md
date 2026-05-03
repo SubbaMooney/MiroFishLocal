@@ -70,7 +70,23 @@ flowchart TB
 | Phase 3 — Search & Tools | erledigt (2026-05-01) | 47/47 grün | Phase 3a: EntityReader (NetworkX) ersetzt ZepEntityReader. Phase 3b: LightRAGToolsService + InterviewToolService ersetzen ZepToolsService im report_agent |
 | Phase 4 — Profile + Memory-Updater | erledigt (2026-05-03) | 19/19 grün | GraphMemoryUpdater (LightRAG + aggressives Throttling 60x) ersetzt ZepGraphMemoryUpdater. oasis_profile_generator._search_zep_for_entity nutzt jetzt EntityReader (kein LLM-Call). |
 | Phase 4.5 — Cost-Optimization | erledigt (2026-05-03) | 6/6 grün | chunk_token_size 1200->5000, gleaning 1->0, examples-drop. Echt-Spike: 2.1x weniger Cost im Mini-Korpus (extrapoliert ~10-100x bei 10MB-PDF) |
-| Phase 5 — Cleanup & Tests | offen | — | zep_tools.py / zep_entity_reader.py / zep_graph_memory_updater.py / utils/zep_paging.py loeschen + Config.ZEP_API_KEY-Pflicht entfernen |
+| Phase 5 — Cleanup | erledigt (2026-05-03) | 103/103 grün | 4 Zep-Module geloescht (zep_tools, zep_entity_reader, zep_graph_memory_updater, utils/zep_paging), Config.ZEP_API_KEY-Pflicht entfernt, 6 Pre-Flight-Checks in api/graph + api/simulation entfernt, zep-cloud aus pyproject.toml raus, self.zep_tools->self.tools + _search_zep_for_entity->_search_graph_for_entity Renames, .env.example aktualisiert. Backend bootet sauber. |
+| C — Ollama-Provider-Validierung | erledigt (2026-05-03) | smoke-script GO | scripts/check_ollama.py validiert produktive Factory gegen lokalen Ollama-Daemon (gemma3:27b + nomic-embed-text). KEINE Code-Aenderung noetig — OpenAI-SDK-kompatibilitaet reicht. |
+
+## Anpassungen aus Phase 5 + C (Implementierung, 2026-05-03)
+
+Designentscheidungen, die im Plan nicht spezifiziert waren:
+
+1. **Phase 5 + C in einem Rutsch** — User-Wahl „pahse 5 & c": Cleanup + Ollama-Validierung gemeinsam abgeschlossen.
+2. **Pre-Flight-Checks komplett entfernt** — api/graph.py und api/simulation.py hatten 6 `if not Config.ZEP_API_KEY: return error` Blocks. Nach Migration sinnlos, ersatzlos gestrichen. Config.validate() at startup prueft jetzt nur noch SECRET_KEY + LLM_API_KEY.
+3. **Stille Bug-Funde wahrend Cleanup**:
+   - `api/report.py` importierte `from ..services.zep_tools import ZepToolsService` an 2 Stellen — wuerde nach File-Delete gecrasht haben. Auf `LightRAGToolsService` umgestellt; `search_graph` -> `quick_search` (semantisch naechster Treffer).
+   - `api/simulation.py` importierte `ZepEntityReader` an 5 Stellen — gleicher Crash-Risiko. Auf `EntityReader` umgestellt.
+   - Beides waere ohne den App-Boot-Smoke-Test (`uv run python -c "from app import create_app; create_app()"`) erst zur Laufzeit aufgefallen.
+4. **`self.zep_tools` Rename mit Namens-Kollision** — ein blinder `replace_all` von `self.zep_tools` -> `self.tools` haette mit dem bereits existierenden `self.tools = self._define_tools()` kollidiert (beide Attribute ueberschreiben sich). Geloest durch Trennung: `self.tools` bleibt der Service (LightRAGToolsService), `self.tool_definitions` ist neu fuer das Schema-Dict.
+5. **Ollama via OpenAI-SDK-Kompatibilitaet** — KEINE Code-Aenderung noetig. Ollama exposed `/v1/chat/completions` und `/v1/embeddings` OpenAI-API-kompatibel. Die provider-agnostische `lightrag_factory` funktioniert ohne Modifikation. Smoke-Skript validiert das against `gemma3:27b` + `nomic-embed-text` (768-dim).
+6. **Smoke-Skript muss dotenv-Auto-Load blockieren** — Config nutzt `load_dotenv(override=True)`, das die Repo-`.env` (i.d.R. mit OpenAI-Werten) ueber Shell-Vars stellt. Das Skript monkeypatcht `dotenv.load_dotenv = lambda *a, **kw: True` VOR Config-Import, damit die Ollama-Args wirken.
+7. **`zep-cloud` aus pyproject.toml entfernt** — nicht mehr Pflicht-Dependency. uv-lock wird beim naechsten `uv sync` aktualisiert.
 
 ## Anpassungen aus Phase 4 + 4.5 (Implementierung, 2026-05-03)
 
