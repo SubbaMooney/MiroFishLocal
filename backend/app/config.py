@@ -99,6 +99,12 @@ class Config:
     # FLASK_DEBUG defaultet auf False — Werkzeug-Debugger erlaubt sonst RCE (C2).
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
+    # API-Key fuer Auth-Middleware (C1). Wird per X-API-Key-Header
+    # erwartet und mit hmac.compare_digest constant-time verglichen.
+    # /health und CORS-Preflight-OPTIONS sind ausgenommen. validate()
+    # erzwingt Mindest-Entropie (>=32 Zeichen).
+    MIROFISH_API_KEY = os.environ.get('MIROFISH_API_KEY')
+
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
 
@@ -200,6 +206,20 @@ class Config:
             )
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
+        # MIROFISH_API_KEY (C1) ist Pflicht und muss eine Mindest-Entropie
+        # haben (>=32 Zeichen). Generieren via:
+        #   python -c "import secrets; print(secrets.token_hex(32))"
+        if not cls.MIROFISH_API_KEY:
+            errors.append(
+                "MIROFISH_API_KEY 未配置 (Pflicht fuer Auth-Middleware — "
+                "bitte in .env setzen, z. B. python -c "
+                "'import secrets; print(secrets.token_hex(32))')"
+            )
+        elif len(cls.MIROFISH_API_KEY) < 32:
+            errors.append(
+                "MIROFISH_API_KEY 太短 (mindestens 32 Zeichen — bitte "
+                "ein zufaelliges Token mit ausreichend Entropie verwenden)"
+            )
         # 错误时附带 .env 加载来源，方便定位
         if errors:
             errors.append(f"配置加载来源: {cls.env_source()}")

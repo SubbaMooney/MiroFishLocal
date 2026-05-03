@@ -49,7 +49,48 @@ def create_app(config_class=Config):
     SimulationRunner.register_cleanup()
     if should_log_startup:
         logger.info("已注册模拟进程清理函数")
-    
+
+    # Auth-Middleware (C1): X-API-Key-Header gegen Config.MIROFISH_API_KEY
+    # constant-time vergleichen. /health und CORS-Preflight (OPTIONS) sind
+    # ausgenommen. Alle anderen Endpunkte (insbesondere /api/*) erfordern
+    # einen gueltigen API-Key, sonst 401 mit format_error_response.
+    import hmac
+    from .utils.error_response import format_error_response
+
+    _AUTH_EXEMPT_PATHS = frozenset({"/health"})
+
+    @app.before_request
+    def require_api_key():
+        # CORS-Preflight muss ohne Auth durchgehen, damit der Browser
+        # die eigentliche Request senden darf. Flask-CORS beantwortet
+        # OPTIONS in seinem eigenen Hook — wir lassen ihn vor uns laufen.
+        if request.method == "OPTIONS":
+            return None
+        if request.path in _AUTH_EXEMPT_PATHS:
+            return None
+
+        provided = request.headers.get("X-API-Key", "")
+        expected = app.config.get("MIROFISH_API_KEY") or ""
+        if not expected:
+            # Server-Fehlkonfig — als Server-Fehler behandeln, aber
+            # nicht im Klartext leaken.
+            auth_logger = get_logger("mirofish.auth")
+            auth_logger.error(
+                "MIROFISH_API_KEY ist nicht konfiguriert — Anfragen "
+                "werden bis zum Setzen des Keys mit 401 abgelehnt"
+            )
+            return format_error_response(
+                PermissionError("auth not configured"), status=401
+            )
+
+        # hmac.compare_digest erwartet bytes oder str; beide muessen
+        # nicht-leer sein, sonst False zurueck.
+        if not hmac.compare_digest(provided, expected):
+            return format_error_response(
+                PermissionError("invalid or missing api key"), status=401
+            )
+        return None
+
     # 请求日志中间件
     @app.before_request
     def log_request():
