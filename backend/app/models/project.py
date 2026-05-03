@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from ..config import Config
+from ..utils.safe_id import safe_id, safe_path_under
 
 
 class ProjectStatus(str, Enum):
@@ -111,8 +112,14 @@ class ProjectManager:
     
     @classmethod
     def _get_project_dir(cls, project_id: str) -> str:
-        """获取项目目录路径"""
-        return os.path.join(cls.PROJECTS_DIR, project_id)
+        """获取项目目录路径
+
+        C6-Fix: project_id muss strict-Format passen, und der finale Pfad
+        wird per ``safe_path_under`` an den realen Projekte-Root angeheftet.
+        Verhindert ``..``-Traversal und Symlink-Escape.
+        """
+        safe_id(project_id, prefix='proj')
+        return safe_path_under(os.path.abspath(cls.PROJECTS_DIR), project_id)
     
     @classmethod
     def _get_project_meta_path(cls, project_id: str) -> str:
@@ -222,18 +229,22 @@ class ProjectManager:
     def delete_project(cls, project_id: str) -> bool:
         """
         删除项目及其所有文件
-        
-        Args:
-            project_id: 项目ID
-            
-        Returns:
-            是否删除成功
+
+        C6-Fix: project_id muss validiert sein. Vor dem rmtree wird
+        zusaetzlich geprueft, dass der realpath weiterhin innerhalb des
+        Projekte-Roots liegt — verhindert das Loeschen von Repo-Verzeichnissen
+        per Pfad-Traversal.
         """
-        project_dir = cls._get_project_dir(project_id)
-        
+        try:
+            safe_id(project_id, prefix='proj')
+            projects_root = os.path.abspath(cls.PROJECTS_DIR)
+            project_dir = safe_path_under(projects_root, project_id)
+        except ValueError:
+            return False
+
         if not os.path.exists(project_dir):
             return False
-        
+
         shutil.rmtree(project_dir)
         return True
     

@@ -15,6 +15,8 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
+from ..utils.safe_id import safe_id, safe_path_under
+from ..utils.error_response import format_error_response
 from ..models.project import ProjectManager
 
 logger = get_logger('mirofish.api.simulation')
@@ -1265,10 +1267,19 @@ def get_simulation_config(simulation_id: str):
 def download_simulation_config(simulation_id: str):
     """下载模拟配置文件"""
     try:
-        manager = SimulationManager()
-        sim_dir = manager._get_simulation_dir(simulation_id)
-        config_path = os.path.join(sim_dir, "simulation_config.json")
-        
+        # C6-Fix: simulation_id validieren und Pfad gegen Sim-Root ankern.
+        try:
+            safe_id(simulation_id, prefix='sim')
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltige simulation_id"}), 400
+
+        sim_root = os.path.abspath(Config.OASIS_SIMULATION_DATA_DIR)
+        try:
+            sim_dir = safe_path_under(sim_root, simulation_id)
+            config_path = safe_path_under(sim_dir, "simulation_config.json")
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltiger Pfad"}), 400
+
         if not os.path.exists(config_path):
             return jsonify({
                 "success": False,
@@ -1957,18 +1968,26 @@ def get_simulation_posts(simulation_id: str):
     返回帖子列表（从SQLite数据库读取）
     """
     try:
+        # C6-Fix: simulation_id und platform vor Pfadbau validieren.
+        try:
+            safe_id(simulation_id, prefix='sim')
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltige simulation_id"}), 400
+
         platform = request.args.get('platform', 'reddit')
+        if platform not in ('twitter', 'reddit'):
+            return jsonify({"success": False, "error": "ungueltige platform"}), 400
+
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
-        sim_dir = os.path.join(
-            os.path.dirname(__file__),
-            f'../../uploads/simulations/{simulation_id}'
-        )
-        
-        db_file = f"{platform}_simulation.db"
-        db_path = os.path.join(sim_dir, db_file)
-        
+
+        sim_root = os.path.abspath(Config.OASIS_SIMULATION_DATA_DIR)
+        try:
+            sim_dir = safe_path_under(sim_root, simulation_id)
+            db_path = safe_path_under(sim_dir, f"{platform}_simulation.db")
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltiger Pfad"}), 400
+
         if not os.path.exists(db_path):
             return jsonify({
                 "success": True,
@@ -2032,17 +2051,23 @@ def get_simulation_comments(simulation_id: str):
         offset: 偏移量
     """
     try:
+        # C6-Fix: simulation_id vor Pfadbau validieren.
+        try:
+            safe_id(simulation_id, prefix='sim')
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltige simulation_id"}), 400
+
         post_id = request.args.get('post_id')
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
-        sim_dir = os.path.join(
-            os.path.dirname(__file__),
-            f'../../uploads/simulations/{simulation_id}'
-        )
-        
-        db_path = os.path.join(sim_dir, "reddit_simulation.db")
-        
+
+        sim_root = os.path.abspath(Config.OASIS_SIMULATION_DATA_DIR)
+        try:
+            sim_dir = safe_path_under(sim_root, simulation_id)
+            db_path = safe_path_under(sim_dir, "reddit_simulation.db")
+        except ValueError:
+            return jsonify({"success": False, "error": "ungueltiger Pfad"}), 400
+
         if not os.path.exists(db_path):
             return jsonify({
                 "success": True,
