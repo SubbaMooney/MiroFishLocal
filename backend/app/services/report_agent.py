@@ -22,6 +22,7 @@ from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, t
+from ..utils.safe_id import safe_id, safe_path_under
 from .lightrag_tools import (
     LightRAGToolsService,
     SearchResult,
@@ -1911,8 +1912,16 @@ class ReportManager:
     
     @classmethod
     def _get_report_folder(cls, report_id: str) -> str:
-        """获取报告文件夹路径"""
-        return os.path.join(cls.REPORTS_DIR, report_id)
+        """获取报告文件夹路径
+
+        C6-Fix: report_id muss strict-Format passen, und der finale Pfad
+        wird per ``safe_path_under`` an den realen Reports-Root angeheftet.
+        Verhindert ``..``-Traversal, absolute IDs und Symlink-Escape.
+        Anwendbar auf alle ``_get_*_path`` Helpers, die diesen Folder
+        als Praefix verwenden.
+        """
+        safe_id(report_id, prefix='report')
+        return safe_path_under(os.path.abspath(cls.REPORTS_DIR), report_id)
     
     @classmethod
     def _ensure_report_folder(cls, report_id: str) -> str:

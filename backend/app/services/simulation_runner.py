@@ -21,6 +21,7 @@ from queue import Queue
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.locale import get_locale, set_locale
+from ..utils.safe_id import safe_id, safe_path_under, safe_filename
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
 
@@ -335,11 +336,18 @@ class SimulationRunner:
         existing = cls.get_run_state(simulation_id)
         if existing and existing.runner_status in [RunnerStatus.RUNNING, RunnerStatus.STARTING]:
             raise ValueError(f"模拟已在运行中: {simulation_id}")
-        
-        # 加载模拟配置
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        config_path = os.path.join(sim_dir, "simulation_config.json")
-        
+
+        # C6-Fix: simulation_id und alle abgeleiteten Pfade gegen den
+        # realen Sim-Root validieren, bevor sie an subprocess gereicht werden.
+        # Vor dem Fix konnte ``--config`` auf beliebige Dateien zeigen.
+        try:
+            safe_id(simulation_id, prefix='sim')
+            sim_root = os.path.abspath(cls.RUN_STATE_DIR)
+            sim_dir = safe_path_under(sim_root, simulation_id)
+            config_path = safe_path_under(sim_dir, "simulation_config.json")
+        except ValueError as exc:
+            raise ValueError(f"ungueltige simulation_id oder Pfad: {exc}") from exc
+
         if not os.path.exists(config_path):
             raise ValueError(f"模拟配置不存在，请先调用 /prepare 接口")
         

@@ -41,8 +41,15 @@ def create_app(config_class=Config):
         logger.info("MiroFish Backend 启动中...")
         logger.info("=" * 50)
     
-    # 启用CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # 启用CORS — C3-Fix: explizite Origin-Whitelist statt Wildcard.
+    # Origins kommen aus Config.CORS_ALLOWED_ORIGINS (per ENV
+    # CORS_ALLOWED_ORIGINS konfigurierbar). Validate() in config.py lehnt
+    # leere Listen / '*' explizit ab.
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": Config.CORS_ALLOWED_ORIGINS}},
+        supports_credentials=False,
+    )
     
     # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
     from .services.simulation_runner import SimulationRunner
