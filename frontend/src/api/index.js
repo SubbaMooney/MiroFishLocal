@@ -49,10 +49,19 @@ const buildSafeError = (statusCode, rawServerError) => {
   return err
 }
 
+// API-Key fuer Auth-Middleware (C1). Aus VITE_MIROFISH_API_KEY zur
+// Build-Zeit gelesen. Ohne Key sendet der Axios-Interceptor keinen
+// X-API-Key-Header — der Backend antwortet dann mit 401, was die UI
+// als "Nicht authentifiziert" anzeigt.
+const MIROFISH_API_KEY = import.meta.env.VITE_MIROFISH_API_KEY || ''
+
 // 请求拦截器
 service.interceptors.request.use(
   config => {
     config.headers['Accept-Language'] = i18n.global.locale.value
+    if (MIROFISH_API_KEY) {
+      config.headers['X-API-Key'] = MIROFISH_API_KEY
+    }
     return config
   },
   error => {
