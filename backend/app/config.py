@@ -105,6 +105,18 @@ class Config:
     # erzwingt Mindest-Entropie (>=32 Zeichen).
     MIROFISH_API_KEY = os.environ.get('MIROFISH_API_KEY')
 
+    # CORS-Whitelist (C3): kommagetrennte Liste expliziter Origins.
+    # KEIN Wildcard mehr — validate() lehnt leere Listen oder ein "*"
+    # explizit ab. Default deckt die Vite-Dev-Server-Bindings ab.
+    CORS_ALLOWED_ORIGINS = [
+        o.strip()
+        for o in os.environ.get(
+            'CORS_ALLOWED_ORIGINS',
+            'http://localhost:3000,http://127.0.0.1:3000',
+        ).split(',')
+        if o.strip()
+    ]
+
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
     JSON_AS_ASCII = False
 
@@ -219,6 +231,19 @@ class Config:
             errors.append(
                 "MIROFISH_API_KEY 太短 (mindestens 32 Zeichen — bitte "
                 "ein zufaelliges Token mit ausreichend Entropie verwenden)"
+            )
+        # CORS-Whitelist (C3): explizite Origins erforderlich. Wildcard
+        # ('*') wird auf zustands-aendernden Endpunkten als Sicherheitsrisiko
+        # abgelehnt — siehe docs/SECURITY-AUDIT.md, Finding C3.
+        if not cls.CORS_ALLOWED_ORIGINS:
+            errors.append(
+                "CORS_ALLOWED_ORIGINS 未配置 — bitte mindestens eine "
+                "konkrete Origin angeben (z. B. http://localhost:3000)"
+            )
+        elif any(o == '*' for o in cls.CORS_ALLOWED_ORIGINS):
+            errors.append(
+                "CORS_ALLOWED_ORIGINS darf '*' nicht enthalten — bitte "
+                "explizite Frontend-Origins angeben (Audit-Finding C3)"
             )
         # 错误时附带 .env 加载来源，方便定位
         if errors:
