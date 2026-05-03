@@ -14,8 +14,6 @@ dependencies = [
     "flask-cors>=6.0.0",
     # LLM 相关
     "openai>=1.0.0",
-    # Zep Cloud
-    "zep-cloud==3.13.0",
     # OASIS 社交媒体模拟
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
@@ -24,7 +22,7 @@ dependencies = [
     # 编码检测（支持非UTF-8编码的文本文件）
     "charset-normalizer>=3.0.0",
     "chardet>=5.0.0",
-    # GraphRAG (Phase 1 Zep→LightRAG Migration, parallel zu zep-cloud)
+    # GraphRAG (Phase 1-5 Zep->LightRAG Migration komplett)
     "lightrag-hku>=1.4.10,<1.5",
     # 工具库
     "python-dotenv>=1.0.0",
