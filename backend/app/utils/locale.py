@@ -1,9 +1,25 @@
+"""
+Locale-Resolver fuer Backend-Threads, Async-Tasks und Flask-Requests.
+
+Fix M7 (Audit Medium): Die alte Implementierung benutzte
+``threading.local()``. Das war OK fuer Worker-Threads (die ihre Locale
+explizit via ``set_locale`` setzen), bricht aber unter
+``asyncio``: Mehrere coroutines im selben Thread teilen sich denselben
+``threading.local`` und ueberschreiben gegenseitig ihre Locale. Mit
+LightRAG-Migration laufen RAG-Calls async im Worker-Pool und koennen
+Locale durch Race Conditions falsch zuruecksetzen.
+
+Loesung: ``contextvars.ContextVar``. Async-Tasks erben den Context
+beim Spawn, koennen ihn lokal mutieren, ohne Geschwister-Tasks zu
+beeinflussen, und Threads erhalten beim Start einen frischen Default.
+"""
+
 import json
 import os
-import threading
-from flask import request, has_request_context
+from contextvars import ContextVar
 
-_thread_local = threading.local()
+from flask import has_request_context, request
+
 
 _locales_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'locales')
 
@@ -20,16 +36,32 @@ for filename in os.listdir(_locales_dir):
             _translations[locale_name] = json.load(f)
 
 
-def set_locale(locale: str):
-    """Set locale for current thread. Call at the start of background threads."""
-    _thread_local.locale = locale
+# Default ist absichtlich ``None``, sodass ``get_locale`` zwischen
+# "explizit ``zh`` gesetzt" und "noch nichts gesetzt" unterscheiden
+# kann. Faellt auf ``zh`` zurueck.
+_locale_var: ContextVar[str | None] = ContextVar('mirofish_locale', default=None)
+
+
+def set_locale(locale: str) -> None:
+    """Setze Locale fuer den aktuellen Async-Context bzw. Thread.
+
+    Beim Spawn eines neuen Threads wird die ContextVar auf den Default
+    (``None``) zurueckgesetzt — kein Leak zwischen Threads.
+    """
+    _locale_var.set(locale)
 
 
 def get_locale() -> str:
+    """Liefere die aktive Locale.
+
+    Reihenfolge: 1) Flask-Request-Header (wenn im Request-Context),
+    2) ContextVar (gesetzt durch ``set_locale``), 3) Fallback ``zh``.
+    """
     if has_request_context():
         raw = request.headers.get('Accept-Language', 'zh')
         return raw if raw in _translations else 'zh'
-    return getattr(_thread_local, 'locale', 'zh')
+    value = _locale_var.get()
+    return value if value is not None else 'zh'
 
 
 def t(key: str, **kwargs) -> str:
