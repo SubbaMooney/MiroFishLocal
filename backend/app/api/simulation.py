@@ -22,6 +22,7 @@ from ..utils.locale import t, get_locale, set_locale
 from ..utils.safe_id import safe_id, safe_path_under
 from ..utils.error_response import format_error_response
 from ..utils.authz import require_resource
+from ..utils.rate_limit import limiter
 from ..models.project import ProjectManager
 
 logger = get_logger('mirofish.api.simulation')
@@ -1441,6 +1442,7 @@ def generate_profiles():
 # ============== 模拟运行控制接口 ==============
 
 @simulation_bp.route('/start', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_SIMULATION_START)
 def start_simulation():
     """
     开始运行模拟
@@ -2208,6 +2210,7 @@ def get_simulation_comments(simulation_id: str):
 # ============== Interview 采访接口 ==============
 
 @simulation_bp.route('/interview', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_INTERVIEW)
 def interview_agent():
     """
     采访单个Agent
@@ -2336,6 +2339,7 @@ def interview_agent():
 
 
 @simulation_bp.route('/interview/batch', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_INTERVIEW)
 def interview_agents_batch():
     """
     批量采访多个Agent
@@ -2473,6 +2477,7 @@ def interview_agents_batch():
 
 
 @simulation_bp.route('/interview/all', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_INTERVIEW)
 def interview_all_agents():
     """
     全局采访 - 使用相同问题采访所有Agent

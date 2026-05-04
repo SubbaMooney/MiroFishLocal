@@ -19,6 +19,7 @@ from ..utils.locale import t, get_locale, set_locale
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 from ..utils.authz import require_resource
+from ..utils.rate_limit import limiter
 
 # 获取日志器
 logger = get_logger('mirofish.api')
@@ -124,6 +125,7 @@ def reset_project(project_id: str):
 # ============== 接口1：上传文件并生成本体 ==============
 
 @graph_bp.route('/ontology/generate', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_ONTOLOGY_GENERATE)
 def generate_ontology():
     """
     接口1：上传文件，分析生成本体定义
@@ -261,6 +263,7 @@ def generate_ontology():
 # ============== 接口2：构建图谱 ==============
 
 @graph_bp.route('/build', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_GRAPH_BUILD)
 def build_graph():
     """
     接口2：根据project_id构建图谱

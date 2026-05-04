@@ -18,6 +18,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
 from ..utils.authz import require_resource
+from ..utils.rate_limit import limiter
 
 logger = get_logger('mirofish.api.report')
 
@@ -25,6 +26,7 @@ logger = get_logger('mirofish.api.report')
 # ============== 报告生成接口 ==============
 
 @report_bp.route('/generate', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_REPORT_GENERATE)
 def generate_report():
     """
     生成模拟分析报告（异步任务）
@@ -473,6 +475,7 @@ def delete_report(report_id: str):
 # ============== Report Agent对话接口 ==============
 
 @report_bp.route('/chat', methods=['POST'])
+@limiter.limit(lambda: Config.RATE_LIMIT_REPORT_CHAT)
 def chat_with_report_agent():
     """
     与Report Agent对话 (H4-Fix: server-side chat history).

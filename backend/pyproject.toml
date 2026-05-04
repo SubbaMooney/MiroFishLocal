@@ -12,6 +12,9 @@ dependencies = [
     # 核心框架
     "flask>=3.0.0",
     "flask-cors>=6.0.0",
+    # Rate-Limiting (Audit H6) — flask-limiter mit memory-storage.
+    # Single-User-System, daher reicht in-memory ohne Redis-Backend.
+    "flask-limiter>=3.5.0",
     # LLM 相关
     "openai>=1.0.0",
     # OASIS 社交媒体模拟

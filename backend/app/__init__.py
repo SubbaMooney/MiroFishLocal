@@ -116,6 +116,29 @@ def create_app(config_class=Config):
         logger.debug(f"响应: {response.status_code}")
         return response
     
+    # H6: Rate-Limiter init. Muss VOR den Blueprints laufen, damit
+    # die @limiter.limit-Dekorationen in den Routen tatsaechlich greifen.
+    # Ist RATE_LIMIT_ENABLED=False, deaktivieren wir den Limiter komplett —
+    # bequem fuer Tests, die viele Requests schicken.
+    from .utils.rate_limit import limiter
+    limiter.init_app(app)
+    if not app.config.get('RATE_LIMIT_ENABLED', True):
+        limiter.enabled = False
+
+    # 429-Handler: Limiter wirft RateLimitExceeded; wir vereinheitlichen
+    # die Antwort mit unserem error_response-Format (C5).
+    from flask_limiter.errors import RateLimitExceeded
+
+    @app.errorhandler(RateLimitExceeded)
+    def handle_rate_limit_exceeded(exc):
+        # exc.description traegt die Limit-Beschreibung wie "5 per 1 minute".
+        return format_error_response(
+            RuntimeError(
+                f"Rate-Limit ueberschritten: {getattr(exc, 'description', 'too many requests')}"
+            ),
+            status=429,
+        )
+
     # 注册蓝图
     from .api import graph_bp, simulation_bp, report_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
