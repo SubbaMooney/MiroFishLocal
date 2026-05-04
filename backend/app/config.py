@@ -172,6 +172,15 @@ class Config:
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')
     ALLOWED_EXTENSIONS = {'pdf', 'md', 'txt', 'markdown'}
 
+    # PDF-Bomb-Schutz (H7): PyMuPDF oeffnet sonst beliebig grosse PDFs ohne
+    # Page- oder Decoded-Size-Limit. Eine 50 MB komprimierte PDF kann
+    # Millionen Seiten oder mehrere Gigabyte dekomprimierten Text
+    # enthalten -> OOM. Defaults: 500 Seiten, 5 MB extrahierter Text.
+    # Werte ueber Umgebungsvariablen ``PDF_MAX_PAGES`` /
+    # ``PDF_MAX_EXTRACTED_BYTES`` ueberschreibbar.
+    PDF_MAX_PAGES = int(os.environ.get('PDF_MAX_PAGES', '500'))
+    PDF_MAX_EXTRACTED_BYTES = int(os.environ.get('PDF_MAX_EXTRACTED_BYTES', '5000000'))
+
     # 文本处理配置
     # 默认切块大小 — angepasst fuer LightRAG-Cost (siehe LIGHTRAG_CHUNK_TOKEN_SIZE
     # oben). Bei 5000 Zeichen MiroFish-Chunk wird LightRAG i.d.R. nicht

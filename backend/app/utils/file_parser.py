@@ -95,19 +95,49 @@ class FileParser:
     
     @staticmethod
     def _extract_from_pdf(file_path: str) -> str:
-        """从PDF提取文本"""
+        """从PDF提取文本
+
+        H7-Fix: PyMuPDF wird mit Page- und Decoded-Size-Limits umgeben.
+        Eine 50 MB komprimierte PDF kann Millionen Seiten oder mehrere
+        Gigabyte dekomprimierten Text enthalten (PDF-Bombe). Limits werden
+        aus ``Config.PDF_MAX_PAGES`` und ``Config.PDF_MAX_EXTRACTED_BYTES``
+        gelesen und werfen ``ValueError``, sobald sie ueberschritten werden.
+        """
         try:
             import fitz  # PyMuPDF
         except ImportError:
             raise ImportError("需要安装PyMuPDF: pip install PyMuPDF")
-        
-        text_parts = []
+
+        # Lazy-Import gegen Zirkularimporte (config -> oasis_actions -> ...).
+        from ..config import Config
+
+        max_pages = Config.PDF_MAX_PAGES
+        max_bytes = Config.PDF_MAX_EXTRACTED_BYTES
+
+        text_parts: List[str] = []
+        running_bytes = 0
         with fitz.open(file_path) as doc:
+            page_count = doc.page_count
+            if page_count > max_pages:
+                raise ValueError(
+                    f"PDF zu gross: {page_count} Seiten ueberschreitet "
+                    f"das Limit von {max_pages} Seiten"
+                )
             for page in doc:
                 text = page.get_text()
-                if text.strip():
+                if text and text.strip():
+                    # ``len`` auf str gibt Code-Points zurueck; das ist eine
+                    # konservative Approximation von "decoded bytes" (UTF-8
+                    # ist >= 1 Byte pro Code-Point). Fuer den Bomb-Check
+                    # reicht das, weil wir in Bytes-Groessenordnungen rechnen.
+                    running_bytes += len(text.encode('utf-8', errors='replace'))
+                    if running_bytes > max_bytes:
+                        raise ValueError(
+                            f"Extrahierter PDF-Text zu gross: ueber "
+                            f"{max_bytes} Bytes (PDF-Bomb-Schutz)"
+                        )
                     text_parts.append(text)
-        
+
         return "\n\n".join(text_parts)
     
     @staticmethod
