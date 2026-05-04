@@ -400,6 +400,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/services/report_agent.py:1067-1112,1166-1180</code></p>
 <p><code>_parse_tool_calls</code> extrahiert per Regex und ruft <code>_execute_tool</code> direkt mit Modell-gelieferten Parametern. <code>simulation_requirement</code> (User-Input) ist sowohl in System- als auch User-Prompt eingebettet. Angreifer kann Tool-Calls erzwingen mit frei wählbaren Queries gegen Zep-Graphen anderer Projekte und Cost-Inflation via LLM-Logs.</p>
 <p><strong>Fix</strong>: Tool-Call-Allow-List inkl. Parameter-Sanitization; <code>simulation_id</code>/<code>graph_id</code> ausschließlich vom Server gesetzt; Output-Filter zwischen Tool-Antwort und nächstem LLM-Turn.</p>
+<p><strong>Status</strong>: Behoben seit <code>7757ad3</code> (Merge <code>7cfe337</code>). Neue Klassen-Konstante <code>TOOL_PARAM_SCHEMAS</code> in <code>report_agent.py</code> ist Single-Source-of-Truth fuer Tool-Allow-List und Per-Tool-Schema (allowed/required/types/max_str_len/int_bounds). <code>simulation_id</code>, <code>graph_id</code>, <code>report_id</code> und <code>report_context</code> sind absichtlich NICHT in <code>allowed</code> — <code>_execute_tool</code> setzt sie aus dem Agent-Kontext (server-pinned). Neuer Validator <code>_validate_tool_call</code> rejected unbekannte Tools, unerlaubte Keys, falsche Typen, zu lange Strings und out-of-bounds Integer; sein Fehler-String wird dem LLM als Tool-Result serviert (Retry-Pfad). Output-Filter <code>_scrub_tool_call_markup</code> strippt <code>&lt;tool_call&gt;...&lt;/tool_call&gt;</code>-Markup case-insensitiv und multiline aus Tool-Outputs, bevor sie als naechster LLM-Input dienen (Defense-in-Depth gegen reflektierte Prompt-Injection). Tests in <code>backend/tests/test_tool_allowlist.py</code> (24 neu).</p>
 </div>
 
 <div class="finding high">
@@ -423,12 +424,14 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/services/simulation_runner.py:438-448</code></p>
 <p>Jeder <code>POST /api/simulation/start</code> startet <code>subprocess.Popen([python, script, ...])</code> mit <code>start_new_session=True</code>. Ohne Auth ist das DoS- und Crypto-Mining-Vektor.</p>
 <p><strong>Fix</strong>: Pflicht-Auth + Per-User-Concurrency-Limit + Resource-Limits (cgroups, RLIMIT_CPU, RLIMIT_AS).</p>
+<p><strong>Status</strong>: Behoben seit <code>f1ee8e7</code> (Merge <code>7adb17d</code>). MiroFish ist Single-User; Limits sind Self-Protection gegen versehentliche Spawn-Loops und Worker, die in Endlosschleifen Ressourcen fressen. Neue Config-Knobs <code>MAX_CONCURRENT_SIMULATIONS</code> (2), <code>SIMULATION_MAX_MEMORY_MB</code> (4096), <code>SIMULATION_MAX_CPU_SECONDS</code> (3600), <code>SIMULATION_MAX_WALL_SECONDS</code> (7200). <code>SimulationRunner.start_simulation</code> prueft Concurrency-Limit ueber <code>_count_active_processes</code> (Zombies/finished werden gefiltert -&gt; Crash-Loop-Schutz). Die Pruefung wirft <code>SimulationQuotaExceeded</code>, das die API in 429 mit <code>error_code='simulation_quota_exceeded'</code> uebersetzt. <code>_build_preexec_fn</code> setzt <code>RLIMIT_AS</code> und <code>RLIMIT_CPU</code> im Subprozess (POSIX-only; Windows graceful skip). <code>_start_wall_clock_watchdog</code> killt Subprozesse ueber Wall-Clock-Timeout. Tests in <code>backend/tests/test_subprocess_quota.py</code> (13 neu).</p>
 </div>
 
 <div class="finding high">
 <h4>H6 — Keine Rate-Limits auf teure LLM-/Subprozess-Endpunkte</h4>
 <p>Endpunkte ohne Rate-Limit: <code>POST /api/graph/ontology/generate</code>, <code>/build</code>, <code>/api/report/generate</code>, <code>/chat</code>, <code>/api/simulation/interview/*</code>, <code>/start</code>. Anonymer Loop erschöpft API-Budget (<code>LLM_API_KEY</code>/Zep) und CPU.</p>
 <p><strong>Fix</strong>: <code>flask-limiter</code> mit Per-IP- und Per-User-Quota; Token-Budget-Counter.</p>
+<p><strong>Status</strong>: Behoben seit <code>7c9dc6f</code> (Merge <code>09e9af6</code>). <code>flask-limiter&gt;=3.5.0</code> als neue Dependency. Globaler Limiter in <code>backend/app/utils/rate_limit.py</code> mit <code>memory://</code>-Storage und <code>X-API-Key</code> als Identifier (Single-User-System, kein IP-basiertes Limit). Per-Endpoint-Limits aus <code>Config.RATE_LIMIT_*</code>: <code>/api/graph/build</code> 5/min, <code>/api/graph/ontology/generate</code> 5/min, <code>/api/report/generate</code> 10/min, <code>/api/report/chat</code> 30/min, <code>/api/simulation/start</code> 5/min, <code>/api/simulation/interview*</code> 20/min, Default 60/min. <code>RATE_LIMIT_ENABLED=False</code> schaltet Limits global aus (Tests/Dev). 429-Antworten gehen durch den globalen <code>format_error_response</code>-Pfad (C5-Standard-Schema). <code>/health</code> bleibt unauth und unlimitiert. <code>headers_enabled=True</code> liefert <code>X-RateLimit-Limit</code>/<code>-Remaining</code>/<code>-Reset</code>. Tests in <code>backend/tests/test_rate_limits.py</code> (5 neu).</p>
 </div>
 
 <div class="finding high">
@@ -436,6 +439,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/utils/file_parser.py:97-111</code></p>
 <p><code>fitz.open(file_path)</code> öffnet PDF, alle Seiten in Speicher. Kein Page-Limit, kein Decoded-Size-Limit. 50 MB komprimierte PDF mit Millionen Seiten → OOM.</p>
 <p><strong>Fix</strong>: <code>doc.page_count &gt; 500</code> abbrechen + kumulative Textlänge cappen.</p>
+<p><strong>Status</strong>: Behoben seit <code>989fe0b</code> (Merge <code>65299b6</code>). Neue Config-Knobs <code>PDF_MAX_PAGES</code> (default 500) und <code>PDF_MAX_EXTRACTED_BYTES</code> (default 5_000_000), via Umgebungsvariablen ueberschreibbar. <code>FileParser._extract_from_pdf</code> prueft <code>doc.page_count</code> vor dem Schleifen (early reject) und summiert UTF-8-Bytes pro Seite. Beide Limits werfen <code>ValueError</code> mit klarer Meldung. Verteidigungslinie 1 bleibt <code>Flask MAX_CONTENT_LENGTH=50 MB</code> fuer den komprimierten Upload. Tests in <code>backend/tests/test_pdf_bomb.py</code> (6 neu).</p>
 </div>
 
 <div class="finding high">
@@ -443,6 +447,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/api/report.py:417-427</code></p>
 <p><code>tempfile.NamedTemporaryFile(delete=False)</code> wird nie gelöscht. <code>/tmp</code> füllt sich, sensible Inhalte verbleiben.</p>
 <p><strong>Fix</strong>: <code>Response(report.markdown_content, mimetype='text/markdown')</code> direkt streamen statt Tempfile.</p>
+<p><strong>Status</strong>: Behoben seit <code>9f2bd35</code> (Merge <code>cb877d6</code>). <code>NamedTemporaryFile(delete=False)</code>-Detour entfernt; In-Memory-Content wird direkt als <code>Response</code> mit <code>text/markdown</code>-Mimetype und <code>Content-Disposition: attachment</code> ausgeliefert. Der <code>send_file</code>-Pfad mit persistierter MD bekommt explizit <code>text/markdown</code> statt Browser-Heuristik (Defense-in-Depth gegen MIME-Sniffing). Statische Pruefung gegen weitere <code>NamedTemporaryFile(delete=False)</code>-Aufrufe im Backend ist Teil des Test-Suites. Tests in <code>backend/tests/test_no_tempfile_leak.py</code> (4 neu).</p>
 </div>
 
 <div class="finding high">
@@ -450,6 +455,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/api/simulation.py:2029-2035,2103-2116</code></p>
 <p>Bei Schema-Änderungen in OASIS leaken interne Felder. <code>content</code> ist LLM-generiert und fließt direkt in den XSS-anfälligen Renderer (H1).</p>
 <p><strong>Fix</strong>: Explizite Spaltenauswahl + Length-Cap pro Feld.</p>
+<p><strong>Status</strong>: Behoben seit <code>e44f7f9</code> (Merge <code>c4771ea</code>). <code>SELECT *</code>-Queries in <code>/posts</code> und <code>/comments</code> durch explizite Spalten-Listen <code>_POST_FIELDS</code> / <code>_COMMENT_FIELDS</code> ersetzt. Defense-in-Depth via <code>_filter_row_to_allowlist()</code>: selbst wenn die SQL-Liste irgendwann gelockert wird, strippt die Response-Filterung weiter neue OASIS-Felder. <code>content</code> ist LLM-generiert; das Frontend sanitized den Wert via DOMPurify (H1-Verbleib im Frontend, ausserhalb dieses Streams). Tests in <code>backend/tests/test_select_star.py</code> (6 neu).</p>
 </div>
 
 <h3><span class="badge badge-med">MEDIUM</span></h3>
@@ -497,12 +503,12 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
   <thead><tr><th>Kategorie</th><th>Status</th><th>Findings</th></tr></thead>
   <tbody>
     <tr><td>A01 Broken Access Control</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C1, C6, H3, H4 behoben; M9 offen</td></tr>
-    <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-crit">FAIL</span></td><td>C4</td></tr>
-    <tr><td>A03 Injection</td><td><span class="badge badge-crit">FAIL</span></td><td>H1, H2, H4, M6, M8</td></tr>
-    <tr><td>A04 Insecure Design</td><td><span class="badge badge-crit">FAIL</span></td><td>C1, H5, H6, H7, M6</td></tr>
-    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-crit">FAIL</span></td><td>C2, C3, C5, C7, M3, M5, L1–L4</td></tr>
+    <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-low">OK</span></td><td>C4 behoben</td></tr>
+    <tr><td>A03 Injection</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>H2, H4 behoben; H1, M6, M8 offen</td></tr>
+    <tr><td>A04 Insecure Design</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C1, H5, H6, H7 behoben; M6 offen</td></tr>
+    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C2, C3, C5 behoben; C7, M3, M5, L1–L4 offen</td></tr>
     <tr><td>A06 Vulnerable Components</td><td><span class="badge badge-low">OK</span></td><td><code>pip-audit</code> + <code>npm audit</code> in CI empfohlen</td></tr>
-    <tr><td>A07 Auth Failures</td><td><span class="badge badge-crit">FAIL</span></td><td>C1</td></tr>
+    <tr><td>A07 Auth Failures</td><td><span class="badge badge-low">OK</span></td><td>C1 behoben</td></tr>
     <tr><td>A08 Software &amp; Data Integrity</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M10, L6</td></tr>
     <tr><td>A09 Logging &amp; Monitoring</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M3</td></tr>
     <tr><td>A10 SSRF</td><td><span class="badge badge-low">OK</span></td><td>Keine User-URL wird vom Server abgerufen</td></tr>
@@ -520,10 +526,22 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
   <li><strong>C5</strong> — Globaler <code>errorhandler</code>, alle <code>traceback.format_exc()</code> aus Responses entfernen. <em>(Behoben)</em></li>
   <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>). <em>(Behoben — <code>dc85ea3</code>)</em></li>
   <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>. <em>(Behoben)</em></li>
-  <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>.</li>
-  <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig. <em>(H4 behoben — <code>dca36b6</code>)</em></li>
+  <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>. <em>(Behoben — <code>7c9dc6f</code>)</em></li>
+  <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig. <em>(H4 behoben — <code>dca36b6</code>; H2 behoben — <code>7757ad3</code>)</em></li>
 </ol>
-<p><strong>Stand 2026-05-04 (nach Stream H3+H4)</strong>: 13 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6, H3, H4 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H5, H6, H7, H8, H9.</p>
+<p><strong>Stand 2026-05-04 (nach Sprint H2/H5/H6/H7/H8/H9)</strong>: 0 von 9 HIGH offen — H2/H5/H6/H7/H8/H9 in diesem Sprint behoben, H3/H4 in vorherigen Sprints. CRITICAL: 6 von 7 behoben (C1, C2, C3, C4, C5, C6); offen verbleibt nur C7 (Docker non-root + Loopback-Bind). H1 (Stored XSS via Custom-Markdown-Renderer im Frontend) und die LOW/INFO- sowie MEDIUM-Findings sind nicht Teil dieses Sprints.</p>
+
+<table>
+  <thead><tr><th>Finding</th><th>Feature-Commit</th><th>Merge-Commit</th><th>Tests neu</th></tr></thead>
+  <tbody>
+    <tr><td>H7</td><td><code>989fe0b</code></td><td><code>65299b6</code></td><td>6</td></tr>
+    <tr><td>H2</td><td><code>7757ad3</code></td><td><code>7cfe337</code></td><td>24</td></tr>
+    <tr><td>H5</td><td><code>f1ee8e7</code></td><td><code>7adb17d</code></td><td>13</td></tr>
+    <tr><td>H8</td><td><code>9f2bd35</code></td><td><code>cb877d6</code></td><td>4</td></tr>
+    <tr><td>H9</td><td><code>e44f7f9</code></td><td><code>c4771ea</code></td><td>6</td></tr>
+    <tr><td>H6</td><td><code>7c9dc6f</code></td><td><code>09e9af6</code></td><td>5</td></tr>
+  </tbody>
+</table>
 
 <h2 id="quickwin">Was du sofort tun kannst (5 Minuten, hoher Impact)</h2>
 

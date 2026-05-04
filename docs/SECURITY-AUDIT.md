@@ -225,6 +225,8 @@ Auch alle `innerHTML`-Stellen in `Step4Report.vue:1534/1561/1573` umstellen.
 
 **Fix**: Tool-Call-Allow-List inkl. Parameter-Sanitization; `simulation_id`/`graph_id` ausschließlich vom Server gesetzt; Output-Filter zwischen Tool-Antwort und nächstem LLM-Turn.
 
+**Status**: Behoben seit `7757ad3` (Merge `7cfe337`). Neue Klassen-Konstante `TOOL_PARAM_SCHEMAS` in `report_agent.py` ist Single-Source-of-Truth fuer Tool-Allow-List und Per-Tool-Schema (allowed/required/types/max_str_len/int_bounds). `simulation_id`, `graph_id`, `report_id` und `report_context` sind absichtlich NICHT in `allowed` — `_execute_tool` setzt sie aus dem Agent-Kontext (server-pinned). Neuer Validator `_validate_tool_call` rejected unbekannte Tools, unerlaubte Keys, falsche Typen, zu lange Strings und out-of-bounds Integer; sein Fehler-String wird dem LLM als Tool-Result serviert (Retry-Pfad). Output-Filter `_scrub_tool_call_markup` strippt `<tool_call>...</tool_call>`-Markup case-insensitiv und multiline aus Tool-Outputs, bevor sie als naechster LLM-Input dienen (Defense-in-Depth gegen reflektierte Prompt-Injection). Tests in `backend/tests/test_tool_allowlist.py` (24 neu).
+
 #### H3 — Cross-Tenant-Zugriff auf Graphen, Simulationen, Reports
 `backend/app/api/graph.py:569-622`, `simulation.py:2004+`, `report.py:444`
 
@@ -250,6 +252,8 @@ Jeder `POST /api/simulation/start` startet `subprocess.Popen([python, script, ..
 
 **Fix**: Pflicht-Auth + Per-User-Concurrency-Limit + Resource-Limits (cgroups, RLIMIT_CPU, RLIMIT_AS).
 
+**Status**: Behoben seit `f1ee8e7` (Merge `7adb17d`). MiroFish ist Single-User; Limits sind Self-Protection gegen versehentliche Spawn-Loops und Worker, die in Endlosschleifen Ressourcen fressen. Neue Config-Knobs `MAX_CONCURRENT_SIMULATIONS` (2), `SIMULATION_MAX_MEMORY_MB` (4096), `SIMULATION_MAX_CPU_SECONDS` (3600), `SIMULATION_MAX_WALL_SECONDS` (7200). `SimulationRunner.start_simulation` prueft Concurrency-Limit ueber `_count_active_processes` (Zombies/finished werden gefiltert -> Crash-Loop-Schutz). Die Pruefung wirft `SimulationQuotaExceeded`, das die API in 429 mit `error_code='simulation_quota_exceeded'` uebersetzt. `_build_preexec_fn` setzt `RLIMIT_AS` und `RLIMIT_CPU` im Subprozess (POSIX-only; Windows graceful skip via JobObjects-Out-of-Scope-Hinweis). `_start_wall_clock_watchdog` killt Subprozesse ueber Wall-Clock-Timeout. Tests in `backend/tests/test_subprocess_quota.py` (13 neu).
+
 #### H6 — Keine Rate-Limits auf teure LLM-/Subprozess-Endpunkte
 Endpunkte ohne Rate-Limit:
 - `POST /api/graph/ontology/generate` (LLM, multi-MB PDFs)
@@ -261,6 +265,8 @@ Endpunkte ohne Rate-Limit:
 Anonymer Loop erschöpft API-Budget (`LLM_API_KEY`/Zep) und CPU.
 
 **Fix**: `flask-limiter` mit Per-IP- und Per-User-Quota; Token-Budget-Counter.
+
+**Status**: Behoben seit `7c9dc6f` (Merge `09e9af6`). `flask-limiter>=3.5.0` als neue Dependency. Globaler Limiter in `backend/app/utils/rate_limit.py` mit `memory://`-Storage und `X-API-Key` als Identifier (Single-User-System, kein IP-basiertes Limit). Per-Endpoint-Limits aus `Config.RATE_LIMIT_*`: `/api/graph/build` 5/min, `/api/graph/ontology/generate` 5/min, `/api/report/generate` 10/min, `/api/report/chat` 30/min, `/api/simulation/start` 5/min, `/api/simulation/interview*` 20/min, Default 60/min. `RATE_LIMIT_ENABLED=False` schaltet Limits global aus (Tests/Dev). 429-Antworten gehen durch den globalen `format_error_response`-Pfad (C5-Standard-Schema). `/health` bleibt unauth und unlimitiert. `headers_enabled=True` liefert `X-RateLimit-Limit`/`-Remaining`/`-Reset`. Tests in `backend/tests/test_rate_limits.py` (5 neu) inklusive statische Pruefung dass alle teuren Endpoints einen `@limiter.limit`-Decorator tragen.
 
 #### H7 — PDF-Bombe / kein PyMuPDF-Limit
 `backend/app/utils/file_parser.py:97-111`
@@ -275,12 +281,16 @@ if sum(len(t) for t in text_parts) > 5_000_000:
     raise ValueError("Extracted text too large")
 ```
 
+**Status**: Behoben seit `989fe0b` (Merge `65299b6`). Neue Config-Knobs `PDF_MAX_PAGES` (default 500) und `PDF_MAX_EXTRACTED_BYTES` (default 5_000_000), via Umgebungsvariablen ueberschreibbar. `FileParser._extract_from_pdf` prueft `doc.page_count` vor dem Schleifen (early reject) und summiert UTF-8-Bytes pro Seite. Beide Limits werfen `ValueError` mit klarer Meldung. Verteidigungslinie 1 bleibt `Flask MAX_CONTENT_LENGTH=50 MB` fuer den komprimierten Upload. Tests in `backend/tests/test_pdf_bomb.py` (6 neu).
+
 #### H8 — Tempfile-Leak im Report-Download
 `backend/app/api/report.py:417-427`
 
 `tempfile.NamedTemporaryFile(delete=False)` wird nie gelöscht. `/tmp` füllt sich; sensible Inhalte verbleiben.
 
 **Fix**: `Response(report.markdown_content, mimetype='text/markdown')` statt Tempfile.
+
+**Status**: Behoben seit `9f2bd35` (Merge `cb877d6`). `NamedTemporaryFile(delete=False)`-Detour entfernt; In-Memory-Content wird direkt als `Response` mit `text/markdown`-Mimetype und `Content-Disposition: attachment` ausgeliefert. Der `send_file`-Pfad mit persistierter MD bekommt explizit `text/markdown` statt Browser-Heuristik (Defense-in-Depth gegen MIME-Sniffing). Statische Pruefung gegen weitere `NamedTemporaryFile(delete=False)`-Aufrufe im Backend ist Teil des Test-Suites. Tests in `backend/tests/test_no_tempfile_leak.py` (4 neu).
 
 #### H9 — `SELECT *` aus User-DB ungefiltert an Client
 `backend/app/api/simulation.py:2029-2035,2103-2116`
@@ -294,6 +304,8 @@ return jsonify({"data": {"posts": posts}})
 Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generiert und fließt direkt in den XSS-anfälligen Renderer (H1).
 
 **Fix**: Explizite Spaltenauswahl + Length-Cap pro Feld.
+
+**Status**: Behoben seit `e44f7f9` (Merge `c4771ea`). `SELECT *`-Queries in `/posts` und `/comments` durch explizite Spalten-Listen `_POST_FIELDS` / `_COMMENT_FIELDS` ersetzt. Defense-in-Depth via `_filter_row_to_allowlist()`: selbst wenn die SQL-Liste irgendwann gelockert wird, strippt die Response-Filterung weiter neue OASIS-Felder. `content` ist LLM-generiert; das Frontend sanitized den Wert via DOMPurify (H1-Verbleib im Frontend, ausserhalb dieses Streams). Tests in `backend/tests/test_select_star.py` (6 neu).
 
 ---
 
@@ -341,12 +353,12 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 | Kategorie | Status | Findings |
 |---|---|---|
 | A01 Broken Access Control | TEILWEISE | C1, C6, H3, H4 behoben; M9 offen |
-| A02 Cryptographic Failures | **FAIL** | C4 |
-| A03 Injection | **FAIL** | H1, H2, H4, M6, M8 |
-| A04 Insecure Design | **FAIL** | C1, H5, H6, H7, M6 |
-| A05 Security Misconfiguration | **FAIL** | C2, C3, C5, C7, M3, M5, L1–L4 |
+| A02 Cryptographic Failures | OK | C4 behoben |
+| A03 Injection | TEILWEISE | H2, H4 behoben; H1, M6, M8 offen |
+| A04 Insecure Design | TEILWEISE | C1, H5, H6, H7 behoben; M6 offen |
+| A05 Security Misconfiguration | TEILWEISE | C2, C3, C5 behoben; C7, M3, M5, L1–L4 offen |
 | A06 Vulnerable Components | OK (current) | `pip-audit` + `npm audit` in CI empfohlen |
-| A07 Auth Failures | **FAIL** | C1 |
+| A07 Auth Failures | OK | C1 behoben |
 | A08 Software & Data Integrity | TEILWEISE | M10, L6 (positiv: kein Pickle in IPC) |
 | A09 Logging & Monitoring | TEILWEISE | M3 |
 | A10 SSRF | OK | Keine User-URL wird vom Server abgerufen |
@@ -363,10 +375,21 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 6. **C5** — Globaler `errorhandler`, alle `traceback.format_exc()` aus Responses entfernen. *(Behoben)*
 7. **C1** — Auth-Layer (mind. API-Key-Header in `before_request`). *(Behoben — `dc85ea3`)*
 8. **C4** — `SECRET_KEY`-Default entfernen, Pflicht in `validate()`. *(Behoben)*
-9. **H6** — `flask-limiter` für `/generate`, `/build`, `/start`, `/chat`.
-10. **H2 + H4** — Tool-Call-Allow-List + `chat_history` server-seitig. *(H4 behoben — `dca36b6`)*
+9. **H6** — `flask-limiter` für `/generate`, `/build`, `/start`, `/chat`. *(Behoben — `7c9dc6f`)*
+10. **H2 + H4** — Tool-Call-Allow-List + `chat_history` server-seitig. *(H4 behoben — `dca36b6`; H2 behoben — `7757ad3`)*
 
-**Stand 2026-05-04 (nach Stream H3+H4)**: 13 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6, H3, H4 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H5, H6, H7, H8, H9.
+**Stand 2026-05-04 (nach Sprint H2/H5/H6/H7/H8/H9)**: 0 von 9 HIGH offen — H2/H5/H6/H7/H8/H9 in diesem Sprint behoben, H3/H4 in vorherigen Sprints. CRITICAL: 6 von 7 behoben (C1, C2, C3, C4, C5, C6); offen verbleibt nur C7 (Docker non-root + Loopback-Bind). Damit sind 8 von 9 HIGH+CRITICAL+(H3, H4)+M3/M4-Frueh-Sprints abgeschlossen, einzig C7 (CRITICAL, Infra) sowie die LOW/INFO- und MEDIUM-Findings (M1, M2, M5–M10) verbleiben.
+
+Sprint-Hashes (in Merge-Reihenfolge):
+
+| Finding | Feature-Commit | Merge-Commit | Tests neu |
+|---|---|---|---|
+| H7 | `989fe0b` | `65299b6` | 6 |
+| H2 | `7757ad3` | `7cfe337` | 24 |
+| H5 | `f1ee8e7` | `7adb17d` | 13 |
+| H8 | `9f2bd35` | `cb877d6` | 4 |
+| H9 | `e44f7f9` | `c4771ea` | 6 |
+| H6 | `7c9dc6f` | `09e9af6` | 5 |
 
 ---
 
