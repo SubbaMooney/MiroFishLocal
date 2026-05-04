@@ -218,6 +218,26 @@ class Config:
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
 
+    # Rate-Limits (Audit H6): flask-limiter mit memory://-Storage und
+    # X-API-Key als Identifier (Single-User-System, kein IP-basiertes
+    # Limit). Defaults sind self-protection gegen versehentliche Loops
+    # und LLM-/Zep-Quota-Erschoepfung. Werte ueberschreibbar via
+    # Umgebungsvariablen RATE_LIMIT_*.
+    RATE_LIMIT_ENABLED = os.environ.get('RATE_LIMIT_ENABLED', 'True').lower() == 'true'
+    RATE_LIMIT_DEFAULT = os.environ.get('RATE_LIMIT_DEFAULT', '60 per minute')
+    RATE_LIMIT_GRAPH_BUILD = os.environ.get('RATE_LIMIT_GRAPH_BUILD', '5 per minute')
+    RATE_LIMIT_ONTOLOGY_GENERATE = os.environ.get(
+        'RATE_LIMIT_ONTOLOGY_GENERATE', '5 per minute'
+    )
+    RATE_LIMIT_REPORT_GENERATE = os.environ.get(
+        'RATE_LIMIT_REPORT_GENERATE', '10 per minute'
+    )
+    RATE_LIMIT_REPORT_CHAT = os.environ.get('RATE_LIMIT_REPORT_CHAT', '30 per minute')
+    RATE_LIMIT_INTERVIEW = os.environ.get('RATE_LIMIT_INTERVIEW', '20 per minute')
+    RATE_LIMIT_SIMULATION_START = os.environ.get(
+        'RATE_LIMIT_SIMULATION_START', '5 per minute'
+    )
+
     @classmethod
     def env_source(cls) -> str:
         """返回 .env 加载来源的可读描述（用于诊断）"""
