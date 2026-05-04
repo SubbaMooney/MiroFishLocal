@@ -407,6 +407,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/api/graph.py:569-622</code>, <code>simulation.py:2004+</code>, <code>report.py:444</code></p>
 <p>Keine Owner-Prüfung. <code>GET /data/&lt;graph_id&gt;</code> und <code>DELETE /delete/&lt;graph_id&gt;</code> lesen/löschen jeden Graphen, dessen ID man errät oder via <code>/list</code> enumeriert.</p>
 <p><strong>Fix</strong>: Server-seitige ACL + Authz-Decorator vor jedem Zugriff.</p>
+<p><strong>Status</strong>: Behoben seit <code>e85556c</code> (Merge <code>5cf59ce</code>). MiroFish ist Single-User, daher kein Multi-Tenant-ACL, sondern Enumeration-Schutz: neuer Decorator <code>@require_resource(kind, id_param)</code> in <code>backend/app/utils/authz.py</code> validiert das ID-Format (per <code>safe_id</code>, oder liberales Regex fuer <code>graph_id</code>) und konsultiert die zustaendige Registry (<code>ProjectManager</code>, <code>SimulationManager</code>, <code>ReportManager</code>, oder Projekt-Liste fuer <code>graph_id</code>). Antwort <code>404</code> ohne Existenz-Leak bei unregistrierten oder syntaktisch ungueltigen IDs. Angewandt auf 24 ID-basierte Routes. Tests in <code>backend/tests/test_resource_authz.py</code> (14 neu).</p>
 </div>
 
 <div class="finding high">
@@ -414,6 +415,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <p><code>backend/app/api/report.py:472-564</code></p>
 <p>Client schickt <code>chat_history</code> direkt mit. Client kann eigene <code>assistant</code>-Rolle mit <code>&lt;tool_call&gt;</code> einschleusen und so Tools auslösen — ohne Auth, ohne Schema-Validierung.</p>
 <p><strong>Fix</strong>: <code>chat_history</code> server-seitig aus persistenter Session laden, niemals vom Client <code>assistant</code>-Messages akzeptieren.</p>
+<p><strong>Status</strong>: Behoben seit <code>dca36b6</code> (Merge <code>dcd4ee3</code>). Neuer Service <code>backend/app/services/chat_session.py</code> mit <code>ChatSessionStore</code> (JSON-File je <code>simulation_id</code> unter <code>&lt;UPLOAD_FOLDER&gt;/chat_sessions/</code>). API-Vertrag <code>POST /api/report/chat</code> akzeptiert nur noch <code>{simulation_id, message}</code>; etwaige <code>chat_history</code> aus dem Body wird ignoriert. <code>sanitize_user_message()</code> strippt <code>&lt;tool_call&gt;...&lt;/tool_call&gt;</code>-Markup (Defense-in-Depth gegen H2). Sanity-Limits: 200 Messages je Session, 8000 Zeichen je Nachricht, Roles auf <code>{user, assistant}</code> beschraenkt. Frontend (<code>Step5Interaction.vue</code>, <code>api/report.js</code>) angepasst: schickt nur <code>message</code>, adoptiert volle History aus Server-Antwort. Neue Routen <code>GET/DELETE /api/report/chat/history/&lt;sim_id&gt;</code>. Tests in <code>backend/tests/test_chat_history.py</code> (18 neu).</p>
 </div>
 
 <div class="finding high">
@@ -494,7 +496,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <table>
   <thead><tr><th>Kategorie</th><th>Status</th><th>Findings</th></tr></thead>
   <tbody>
-    <tr><td>A01 Broken Access Control</td><td><span class="badge badge-crit">FAIL</span></td><td>C1, C6, H3, H4, M9</td></tr>
+    <tr><td>A01 Broken Access Control</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C1, C6, H3, H4 behoben; M9 offen</td></tr>
     <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-crit">FAIL</span></td><td>C4</td></tr>
     <tr><td>A03 Injection</td><td><span class="badge badge-crit">FAIL</span></td><td>H1, H2, H4, M6, M8</td></tr>
     <tr><td>A04 Insecure Design</td><td><span class="badge badge-crit">FAIL</span></td><td>C1, H5, H6, H7, M6</td></tr>
@@ -519,9 +521,9 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
   <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>). <em>(Behoben — <code>dc85ea3</code>)</em></li>
   <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>. <em>(Behoben)</em></li>
   <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>.</li>
-  <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig.</li>
+  <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig. <em>(H4 behoben — <code>dca36b6</code>)</em></li>
 </ol>
-<p><strong>Stand 2026-05-03 (nach Stream A+B)</strong>: 11 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H3, H4, H5, H6, H7, H8, H9.</p>
+<p><strong>Stand 2026-05-04 (nach Stream H3+H4)</strong>: 13 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6, H3, H4 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H5, H6, H7, H8, H9.</p>
 
 <h2 id="quickwin">Was du sofort tun kannst (5 Minuten, hoher Impact)</h2>
 

@@ -228,9 +228,11 @@ Auch alle `innerHTML`-Stellen in `Step4Report.vue:1534/1561/1573` umstellen.
 #### H3 — Cross-Tenant-Zugriff auf Graphen, Simulationen, Reports
 `backend/app/api/graph.py:569-622`, `simulation.py:2004+`, `report.py:444`
 
-Keine Owner-Prüfung. `GET /data/<graph_id>` und `DELETE /delete/<graph_id>` lesen/löschen jeden Graphen, dessen ID man errät oder via `/list` enumeriert.
+Keine Owner-Prüfung. `GET /data/<graph_id>` und `DELETE /delete/<graph_id>` lesen/löschen jeden Graphen, dessen ID man errät oder via `/list` enumiert.
 
-**Fix**: Server-seitige ACL (Project ↔ Graph ↔ Owner) + Authz-Decorator vor jedem Zugriff.
+**Fix**: Server-seitige ACL (Project <-> Graph <-> Owner) + Authz-Decorator vor jedem Zugriff.
+
+**Status**: Behoben seit `e85556c` (Merge `5cf59ce`). MiroFish ist Single-User, daher kein Multi-Tenant-ACL, sondern Enumeration-Schutz: neuer Decorator `@require_resource(kind, id_param)` in `backend/app/utils/authz.py` validiert das ID-Format (per `safe_id`, oder liberales Regex fuer `graph_id`) und konsultiert die zustaendige Registry (`ProjectManager`, `SimulationManager`, `ReportManager`, oder Projekt-Liste fuer `graph_id`). Antwort `404` ohne Existenz-Leak bei unregistrierten oder syntaktisch ungueltigen IDs. Angewandt auf 24 ID-basierte Routes. Tests in `backend/tests/test_resource_authz.py` (14 neu).
 
 #### H4 — `chat_history`-Injection im Report-Chat
 `backend/app/api/report.py:472-564`
@@ -238,6 +240,8 @@ Keine Owner-Prüfung. `GET /data/<graph_id>` und `DELETE /delete/<graph_id>` les
 Client schickt `chat_history` direkt mit. Client kann eigene `assistant`-Rolle mit `<tool_call>` einschleusen und so Tools auslösen — ohne Auth, ohne Schema-Validierung.
 
 **Fix**: `chat_history` server-seitig aus persistenter Session laden, niemals vom Client `assistant`-Messages akzeptieren.
+
+**Status**: Behoben seit `dca36b6` (Merge `dcd4ee3`). Neuer Service `backend/app/services/chat_session.py` mit `ChatSessionStore` (JSON-File je `simulation_id` unter `<UPLOAD_FOLDER>/chat_sessions/`). API-Vertrag `POST /api/report/chat` akzeptiert nur noch `{simulation_id, message}`; etwaige `chat_history` aus dem Body wird ignoriert. `sanitize_user_message()` strippt `<tool_call>...</tool_call>`-Markup (Defense-in-Depth gegen H2). Sanity-Limits: 200 Messages je Session, 8000 Zeichen je Nachricht, Roles auf `{user, assistant}` beschraenkt. Frontend (`Step5Interaction.vue`, `api/report.js`) angepasst: schickt nur `message`, adoptiert volle History aus Server-Antwort. Neue Routen `GET/DELETE /api/report/chat/history/<sim_id>`. Tests in `backend/tests/test_chat_history.py` (18 neu).
 
 #### H5 — Unkontrollierter Subprozess-Spawn ohne Quota
 `backend/app/services/simulation_runner.py:438-448`
@@ -336,7 +340,7 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 
 | Kategorie | Status | Findings |
 |---|---|---|
-| A01 Broken Access Control | **FAIL** | C1, C6, H3, H4, M9 |
+| A01 Broken Access Control | TEILWEISE | C1, C6, H3, H4 behoben; M9 offen |
 | A02 Cryptographic Failures | **FAIL** | C4 |
 | A03 Injection | **FAIL** | H1, H2, H4, M6, M8 |
 | A04 Insecure Design | **FAIL** | C1, H5, H6, H7, M6 |
@@ -360,9 +364,9 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 7. **C1** — Auth-Layer (mind. API-Key-Header in `before_request`). *(Behoben — `dc85ea3`)*
 8. **C4** — `SECRET_KEY`-Default entfernen, Pflicht in `validate()`. *(Behoben)*
 9. **H6** — `flask-limiter` für `/generate`, `/build`, `/start`, `/chat`.
-10. **H2 + H4** — Tool-Call-Allow-List + `chat_history` server-seitig.
+10. **H2 + H4** — Tool-Call-Allow-List + `chat_history` server-seitig. *(H4 behoben — `dca36b6`)*
 
-**Stand 2026-05-03 (nach Stream A+B)**: 11 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H3, H4, H5, H6, H7, H8, H9.
+**Stand 2026-05-04 (nach Stream H3+H4)**: 13 von 16 Critical/High behoben (C1, C2, C3, C4, C5, C6, H3, H4 sowie M3/M4 aus frueheren Sprints). Verbleibend in CRITICAL: C7. Verbleibend in HIGH: H1, H2, H5, H6, H7, H8, H9.
 
 ---
 
