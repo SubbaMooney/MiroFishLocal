@@ -6,7 +6,7 @@ Report API路由
 import os
 import traceback
 import threading
-from flask import request, jsonify, send_file
+from flask import request, jsonify, send_file, Response
 
 from . import report_bp
 from ..config import Config
@@ -413,22 +413,25 @@ def download_report(report_id: str):
             }), 404
         
         md_path = ReportManager._get_report_markdown_path(report_id)
-        
+
+        # H8-Fix: Kein Tempfile-Detour mehr. Falls die MD-Datei nicht
+        # existiert, liefern wir den In-Memory-Content direkt als Response.
+        # Das ehemalige NamedTemporaryFile(delete=False) leakte nach /tmp und
+        # wurde nie aufgeraeumt (Audit H8).
         if not os.path.exists(md_path):
-            # 如果MD文件不存在，生成一个临时文件
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(report.markdown_content)
-                temp_path = f.name
-            
-            return send_file(
-                temp_path,
-                as_attachment=True,
-                download_name=f"{report_id}.md"
+            return Response(
+                report.markdown_content or "",
+                mimetype='text/markdown; charset=utf-8',
+                headers={
+                    'Content-Disposition': (
+                        f'attachment; filename="{report_id}.md"'
+                    )
+                },
             )
-        
+
         return send_file(
             md_path,
+            mimetype='text/markdown; charset=utf-8',
             as_attachment=True,
             download_name=f"{report_id}.md"
         )
