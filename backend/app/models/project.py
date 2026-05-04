@@ -11,8 +11,24 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass, field, asdict
+from werkzeug.utils import secure_filename as _werkzeug_secure_filename
 from ..config import Config
 from ..utils.safe_id import safe_id, safe_path_under
+
+
+# Fix M1: Filename-Sanitisierung. ``original_filename`` floss bisher
+# unbearbeitet in Logs, LLM-Prompts und Filesystem-Operationen.
+# ``werkzeug.utils.secure_filename`` ersetzt Whitespace, schneidet
+# Path-Komponenten und CR/LF-/NUL-Zeichen aus und liefert eine
+# ASCII-sichere Form. Wir reichen den Original-Wert durch
+# ``_safe_original_filename`` und benutzen ein deterministisches
+# Fallback, falls Werkzeug einen Leerstring zurueckgibt (z. B. wenn
+# der Upload-Name nur aus Sonderzeichen bestand).
+def _safe_original_filename(name: str) -> str:
+    if not isinstance(name, str):
+        return "uploaded_file"
+    sanitized = _werkzeug_secure_filename(name)
+    return sanitized or "uploaded_file"
 
 
 class ProjectStatus(str, Enum):
@@ -263,20 +279,26 @@ class ProjectManager:
         """
         files_dir = cls._get_project_files_dir(project_id)
         os.makedirs(files_dir, exist_ok=True)
-        
-        # 生成安全的文件名
-        ext = os.path.splitext(original_filename)[1].lower()
+
+        # Fix M1: Original-Filename sanitisieren, BEVOR er in Logs,
+        # LLM-Prompts oder Filesystem-Operationen weiterfliesst.
+        # Pfad-Komponenten (.. /) werden gestrippt, CR/LF/NUL entfernt.
+        sanitized_original = _safe_original_filename(original_filename)
+
+        # Extension aus dem sanitisierten Namen extrahieren — schuetzt
+        # gegen "image.jpg\nfoo.exe"-Tricks und doppelte Endungen.
+        ext = os.path.splitext(sanitized_original)[1].lower()
         safe_filename = f"{uuid.uuid4().hex[:8]}{ext}"
         file_path = os.path.join(files_dir, safe_filename)
-        
+
         # 保存文件
         file_storage.save(file_path)
-        
+
         # 获取文件大小
         file_size = os.path.getsize(file_path)
-        
+
         return {
-            "original_filename": original_filename,
+            "original_filename": sanitized_original,
             "saved_filename": safe_filename,
             "path": file_path,
             "size": file_size
