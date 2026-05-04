@@ -17,6 +17,7 @@ from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
 from ..utils.safe_id import safe_id, safe_path_under
 from ..utils.error_response import format_error_response
+from ..utils.authz import require_resource
 from ..models.project import ProjectManager
 
 logger = get_logger('mirofish.api.simulation')
@@ -48,6 +49,7 @@ def optimize_interview_prompt(prompt: str) -> str:
 # ============== 实体读取接口 ==============
 
 @simulation_bp.route('/entities/<graph_id>', methods=['GET'])
+@require_resource('graph', 'graph_id')
 def get_graph_entities(graph_id: str):
     """
     获取图谱中的所有实体（已过滤）
@@ -86,6 +88,7 @@ def get_graph_entities(graph_id: str):
 
 
 @simulation_bp.route('/entities/<graph_id>/<entity_uuid>', methods=['GET'])
+@require_resource('graph', 'graph_id')
 def get_entity_detail(graph_id: str, entity_uuid: str):
     """获取单个实体的详细信息"""
     try:
@@ -112,6 +115,7 @@ def get_entity_detail(graph_id: str, entity_uuid: str):
 
 
 @simulation_bp.route('/entities/<graph_id>/by-type/<entity_type>', methods=['GET'])
+@require_resource('graph', 'graph_id')
 def get_entities_by_type(graph_id: str, entity_type: str):
     """获取指定类型的所有实体"""
     try:
@@ -732,6 +736,7 @@ def get_prepare_status():
 
 
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation(simulation_id: str):
     """获取模拟状态"""
     try:
@@ -964,6 +969,7 @@ def get_simulation_history():
 
 
 @simulation_bp.route('/<simulation_id>/profiles', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_profiles(simulation_id: str):
     """
     获取模拟的Agent Profile
@@ -1001,6 +1007,7 @@ def get_simulation_profiles(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/profiles/realtime', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_profiles_realtime(simulation_id: str):
     """
     实时获取模拟的Agent Profile（用于在生成过程中实时查看进度）
@@ -1110,6 +1117,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_config_realtime(simulation_id: str):
     """
     实时获取模拟配置（用于在生成过程中实时查看进度）
@@ -1229,6 +1237,7 @@ def get_simulation_config_realtime(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/config', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_config(simulation_id: str):
     """
     获取模拟配置（LLM智能生成的完整配置）
@@ -1264,6 +1273,7 @@ def get_simulation_config(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def download_simulation_config(simulation_id: str):
     """下载模拟配置文件"""
     try:
@@ -1679,6 +1689,7 @@ def stop_simulation():
 # ============== 实时状态监控接口 ==============
 
 @simulation_bp.route('/<simulation_id>/run-status', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_run_status(simulation_id: str):
     """
     获取模拟运行实时状态（用于前端轮询）
@@ -1736,6 +1747,7 @@ def get_run_status(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/run-status/detail', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_run_status_detail(simulation_id: str):
     """
     获取模拟运行详细状态（包含所有动作）
@@ -1836,6 +1848,7 @@ def get_run_status_detail(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/actions', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_actions(simulation_id: str):
     """
     获取模拟中的Agent动作历史
@@ -1889,6 +1902,7 @@ def get_simulation_actions(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/timeline', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_timeline(simulation_id: str):
     """
     获取模拟时间线（按轮次汇总）
@@ -1928,6 +1942,7 @@ def get_simulation_timeline(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/agent-stats', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_agent_stats(simulation_id: str):
     """
     获取每个Agent的统计信息
@@ -1956,6 +1971,7 @@ def get_agent_stats(simulation_id: str):
 # ============== 数据库查询接口 ==============
 
 @simulation_bp.route('/<simulation_id>/posts', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_posts(simulation_id: str):
     """
     获取模拟中的帖子
@@ -2041,6 +2057,7 @@ def get_simulation_posts(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/comments', methods=['GET'])
+@require_resource('simulation', 'simulation_id')
 def get_simulation_comments(simulation_id: str):
     """
     获取模拟中的评论（仅Reddit）

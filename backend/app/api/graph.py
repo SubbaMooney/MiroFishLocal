@@ -18,6 +18,7 @@ from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
+from ..utils.authz import require_resource
 
 # 获取日志器
 logger = get_logger('mirofish.api')
@@ -34,6 +35,7 @@ def allowed_file(filename: str) -> bool:
 # ============== 项目管理接口 ==============
 
 @graph_bp.route('/project/<project_id>', methods=['GET'])
+@require_resource('project', 'project_id')
 def get_project(project_id: str):
     """
     获取项目详情
@@ -68,6 +70,7 @@ def list_projects():
 
 
 @graph_bp.route('/project/<project_id>', methods=['DELETE'])
+@require_resource('project', 'project_id')
 def delete_project(project_id: str):
     """
     删除项目
@@ -87,6 +90,7 @@ def delete_project(project_id: str):
 
 
 @graph_bp.route('/project/<project_id>/reset', methods=['POST'])
+@require_resource('project', 'project_id')
 def reset_project(project_id: str):
     """
     重置项目状态（用于重新构建图谱）
@@ -554,6 +558,7 @@ def list_tasks():
 # ============== 图谱数据接口 ==============
 
 @graph_bp.route('/data/<graph_id>', methods=['GET'])
+@require_resource('graph', 'graph_id')
 def get_graph_data(graph_id: str):
     """
     获取图谱数据（节点和边）
@@ -575,6 +580,7 @@ def get_graph_data(graph_id: str):
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
+@require_resource('graph', 'graph_id')
 def delete_graph(graph_id: str):
     """
     删除Zep图谱
