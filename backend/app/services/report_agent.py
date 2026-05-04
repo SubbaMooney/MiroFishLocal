@@ -956,18 +956,188 @@ class ReportAgent:
             }
         }
     
+    # H2: Per-Tool-Parameter-Schema. Single-Source-of-Truth fuer:
+    #   - allow-listed Tool-Namen (jeder Schluessel)
+    #   - erlaubte Parameter-Keys (``allowed`` / ``required``)
+    #   - Typ + Length-Caps fuer User-gelieferte Strings
+    #
+    # Servergesetzte IDs (``graph_id``, ``simulation_id``, ``report_id``,
+    # ``report_context``) sind absichtlich NICHT in ``allowed`` — der
+    # Server-Code in ``_execute_tool`` setzt sie aus dem Request-Kontext
+    # und ignoriert was das LLM schreibt (Audit H2: server-pinned IDs).
+    TOOL_PARAM_SCHEMAS: Dict[str, Dict[str, Any]] = {
+        "insight_forge": {
+            "allowed": {"query"},
+            "required": {"query"},
+            "types": {"query": str},
+            "max_str_len": {"query": 4000},
+        },
+        "panorama_search": {
+            "allowed": {"query", "include_expired"},
+            "required": {"query"},
+            "types": {"query": str, "include_expired": (bool, str)},
+            "max_str_len": {"query": 4000},
+        },
+        "quick_search": {
+            "allowed": {"query", "limit"},
+            "required": {"query"},
+            "types": {"query": str, "limit": (int, str)},
+            "max_str_len": {"query": 4000},
+            "int_bounds": {"limit": (1, 100)},
+        },
+        "interview_agents": {
+            # ``query`` als Alias fuer ``interview_topic`` zugelassen,
+            # weil das LLM beides schreibt. _execute_tool normalisiert.
+            "allowed": {"interview_topic", "query", "max_agents"},
+            "required": set(),  # eines von beiden muss vorhanden sein -> Logik im Validator
+            "types": {
+                "interview_topic": str,
+                "query": str,
+                "max_agents": (int, str),
+            },
+            "max_str_len": {"interview_topic": 2000, "query": 2000},
+            "int_bounds": {"max_agents": (1, 10)},
+        },
+    }
+
+    @classmethod
+    def _validate_tool_call(
+        cls, tool_name: str, parameters: Dict[str, Any]
+    ) -> Optional[str]:
+        """H2: Validiert Tool-Call gegen ``TOOL_PARAM_SCHEMAS``.
+
+        Returns:
+            ``None`` bei Erfolg, sonst einen Fehler-String (wird vom
+            Aufrufer als Tool-Result an das LLM zurueckgespielt, damit
+            der Agent einen retry mit korrekten Parametern machen kann).
+        """
+        schema = cls.TOOL_PARAM_SCHEMAS.get(tool_name)
+        if schema is None:
+            return (
+                f"[Tool-Call abgelehnt] unbekanntes Tool '{tool_name}'. "
+                f"Erlaubt: {sorted(cls.TOOL_PARAM_SCHEMAS.keys())}"
+            )
+
+        if not isinstance(parameters, dict):
+            return f"[Tool-Call abgelehnt] parameters muss ein Object sein, nicht {type(parameters).__name__}"
+
+        # Unbekannte Keys ablehnen.
+        extra_keys = set(parameters.keys()) - schema["allowed"]
+        if extra_keys:
+            return (
+                f"[Tool-Call abgelehnt] unerlaubte Parameter "
+                f"{sorted(extra_keys)} fuer Tool '{tool_name}'. "
+                f"Erlaubt: {sorted(schema['allowed'])}"
+            )
+
+        # Required-Keys pruefen.
+        missing = schema["required"] - set(parameters.keys())
+        if missing:
+            return (
+                f"[Tool-Call abgelehnt] fehlende Parameter "
+                f"{sorted(missing)} fuer Tool '{tool_name}'"
+            )
+
+        # interview_agents: ``interview_topic`` ODER ``query`` Pflicht.
+        if tool_name == "interview_agents":
+            if not parameters.get("interview_topic") and not parameters.get("query"):
+                return (
+                    "[Tool-Call abgelehnt] interview_agents braucht "
+                    "interview_topic oder query"
+                )
+
+        # Typ-Checks + Length-Caps.
+        for key, value in parameters.items():
+            expected = schema.get("types", {}).get(key)
+            if expected is not None and not isinstance(value, expected):
+                return (
+                    f"[Tool-Call abgelehnt] Parameter '{key}' hat falschen Typ: "
+                    f"erwartet {expected}, erhalten {type(value).__name__}"
+                )
+            max_len = schema.get("max_str_len", {}).get(key)
+            if max_len is not None and isinstance(value, str) and len(value) > max_len:
+                return (
+                    f"[Tool-Call abgelehnt] Parameter '{key}' zu lang "
+                    f"(>{max_len} Zeichen)"
+                )
+            int_bounds = schema.get("int_bounds", {}).get(key)
+            if int_bounds is not None:
+                lo, hi = int_bounds
+                try:
+                    int_val = int(value)
+                except (TypeError, ValueError):
+                    return f"[Tool-Call abgelehnt] Parameter '{key}' ist keine gueltige Ganzzahl"
+                if int_val < lo or int_val > hi:
+                    return (
+                        f"[Tool-Call abgelehnt] Parameter '{key}' ausserhalb "
+                        f"[{lo},{hi}]"
+                    )
+        return None
+
+    @staticmethod
+    def _scrub_tool_call_markup(text: str) -> str:
+        """H2: Entfernt ``<tool_call>...</tool_call>``-Markup aus Tool-Outputs.
+
+        Tool-Outputs werden vom LLM als naechster Turn-Input gesehen.
+        Falls ein Tool-Result selbst Tool-Call-Markup enthaelt (etwa weil
+        der Memory-Graph User-Posts zurueckliefert, die das Markup als
+        Plaintext enthalten), wuerde der naechste ``_parse_tool_calls``-
+        Pass das als echten Tool-Call interpretieren -> reflektierte
+        Prompt-Injection. Wir strippen den Markup vorbeugend.
+        """
+        if not isinstance(text, str):
+            return text
+        # Markup case-insensitiv entfernen, mehrere Zeilen erlauben.
+        cleaned = re.sub(
+            r'<\s*tool_call\s*>.*?<\s*/\s*tool_call\s*>',
+            '[entferntes tool_call-markup]',
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        # Auch nackte oeffnende oder schliessende Tags allein entfernen.
+        cleaned = re.sub(
+            r'<\s*/?\s*tool_call\s*>',
+            '',
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        return cleaned
+
     def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
         """
         执行工具调用
-        
+
+        H2-Fix: Vor jeder Ausfuehrung wird ``_validate_tool_call`` aufgerufen.
+        Unbekannte Tools / unerlaubte Parameter / Typ- oder Length-Verstoesse
+        liefern einen Fehler-String zurueck (anstelle eines echten
+        Aufrufs), den der Agent im naechsten Turn sieht.
+
+        Server-pinned IDs: ``self.graph_id``, ``self.simulation_id`` und
+        ``self.simulation_requirement`` werden ausschliesslich aus dem
+        Agent-Kontext genommen — das LLM kann sie nicht ueberschreiben.
+
         Args:
             tool_name: 工具名称
             parameters: 工具参数
             report_context: 报告上下文（用于InsightForge）
-            
+
         Returns:
             工具执行结果（文本格式）
         """
+        # Defensive: parameters auf dict normalisieren.
+        if parameters is None:
+            parameters = {}
+
+        validation_error = self._validate_tool_call(tool_name, parameters)
+        if validation_error is not None:
+            logger.warning(
+                "H2: Tool-Call abgelehnt. tool=%s params=%s reason=%s",
+                tool_name,
+                parameters,
+                validation_error,
+            )
+            return validation_error
+
         logger.info(t('report.executingTool', toolName=tool_name, params=parameters))
         
         try:
@@ -1437,6 +1607,10 @@ class ReportAgent:
                     call.get("parameters", {}),
                     report_context=report_context
                 )
+                # H2: Tool-Output sanitisieren, bevor er als naechster
+                # LLM-Input dient (Defense-in-Depth gegen reflektierte
+                # Tool-Call-Injection in User-/Memory-Inhalten).
+                result = self._scrub_tool_call_markup(result)
 
                 if self.report_logger:
                     self.report_logger.log_tool_result(
@@ -1853,6 +2027,9 @@ class ReportAgent:
                 if len(tool_calls_made) >= self.MAX_TOOL_CALLS_PER_CHAT:
                     break
                 result = self._execute_tool(call["name"], call.get("parameters", {}))
+                # H2: Tool-Output sanitisieren (Defense-in-Depth gegen
+                # reflektierte Tool-Call-Injection im naechsten LLM-Turn).
+                result = self._scrub_tool_call_markup(result)
                 tool_results.append({
                     "tool": call["name"],
                     "result": result[:1500]  # 限制结果长度
