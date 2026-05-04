@@ -1639,6 +1639,7 @@ name = "mirofish-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "bleach" },
     { name = "camel-ai" },
     { name = "camel-oasis" },
     { name = "chardet" },
@@ -1668,6 +1669,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bleach", specifier = ">=6.0.0" },
     { name = "camel-ai", specifier = "==0.2.78" },
     { name = "camel-oasis", specifier = "==0.2.5" },
     { name = "chardet", specifier = ">=5.0.0" },

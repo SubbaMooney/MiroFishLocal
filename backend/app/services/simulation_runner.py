@@ -27,6 +27,62 @@ from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
 
 logger = get_logger('mirofish.simulation_runner')
 
+
+# ---------------------------------------------------------------------------
+# Fix M10: ENV-Allow-List fuer Subprozesse
+# ---------------------------------------------------------------------------
+#
+# Bisher reichten wir ``os.environ.copy()`` an die Worker weiter. Damit
+# konnten Variablen wie ``AWS_SECRET_ACCESS_KEY``, ``GITHUB_TOKEN`` oder
+# ``DATABASE_URL`` in einen Subprozess fliessen, der sie nicht braucht
+# und im schlimmsten Fall an LLM-Logs/Reports weiterreicht.
+#
+# Loesung: explizite Whitelist. Alles, was hier nicht gelistet ist, wird
+# nicht weitergegeben. Praefix-Patterns ermoeglichen Familien-Whitelists
+# (``LLM_BOOST_*``, ``OASIS_*``, ``LIGHTRAG_*``, ``LC_*``).
+
+_SUBPROCESS_ENV_ALLOWLIST_EXACT: frozenset = frozenset({
+    # LLM-Konfiguration (Pflicht)
+    'LLM_API_KEY', 'LLM_BASE_URL', 'LLM_MODEL_NAME',
+    # MiroFish-Backend-Auth (fuer IPC zurueck zum Server)
+    'MIROFISH_API_KEY',
+    # POSIX-Defaults — ohne ``PATH`` findet das Subsystem keine Binaries
+    'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TEMP', 'TMP',
+    # Locale
+    'LANG', 'LC_ALL',
+    # Python-Encoding (wird zusaetzlich vom Runner explizit ueberschrieben)
+    'PYTHONUTF8', 'PYTHONIOENCODING', 'PYTHONPATH',
+    # Windows-spezifische POSIX-Aequivalente
+    'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+    # Optional: Default-Rundenzahl
+    'OASIS_DEFAULT_MAX_ROUNDS',
+})
+
+_SUBPROCESS_ENV_ALLOWLIST_PREFIXES: tuple = (
+    'LLM_BOOST_',  # optionaler Boost-LLM-Konfig-Block
+    'OASIS_',      # OASIS-Tuning (Action Sets etc.)
+    'LIGHTRAG_',   # LightRAG-Tuning (Working-Dir, Model-Configs)
+    'LC_',         # POSIX-Locale-Familie (LC_TIME, LC_NUMERIC, ...)
+)
+
+
+def build_subprocess_env() -> Dict[str, str]:
+    """Konstruiere das ENV-Dict fuer Simulation-Subprozesse.
+
+    Statt ``os.environ.copy()`` wird gegen eine kuratierte Allow-List
+    gefiltert. Variablen ausserhalb der Liste fliessen nicht in den
+    Worker — verhindert Token-/Secret-Leaks via untrusted Subprozesse.
+    """
+    allowed: Dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key in _SUBPROCESS_ENV_ALLOWLIST_EXACT:
+            allowed[key] = value
+            continue
+        if any(key.startswith(prefix) for prefix in _SUBPROCESS_ENV_ALLOWLIST_PREFIXES):
+            allowed[key] = value
+    return allowed
+
+
 # 标记是否已注册清理函数
 _cleanup_registered = False
 
@@ -571,7 +627,12 @@ class SimulationRunner:
             
             # 设置子进程环境变量，确保 Windows 上使用 UTF-8 编码
             # 这可以修复第三方库（如 OASIS）读取文件时未指定编码的问题
-            env = os.environ.copy()
+            #
+            # Fix M10: Statt os.environ.copy() — kuratierte Allow-List.
+            # ``build_subprocess_env`` filtert sensible Variablen
+            # (AWS-/GitHub-Tokens, DB-URLs, …) raus. Nur LLM-/OASIS-/
+            # LIGHTRAG-/POSIX-Vars erreichen den Worker.
+            env = build_subprocess_env()
             env['PYTHONUTF8'] = '1'  # Python 3.7+ 支持，让所有 open() 默认使用 UTF-8
             env['PYTHONIOENCODING'] = 'utf-8'  # 确保 stdout/stderr 使用 UTF-8
             

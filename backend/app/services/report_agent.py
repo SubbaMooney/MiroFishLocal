@@ -22,6 +22,7 @@ from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, t
+from ..utils.markdown_sanitizer import sanitize_markdown
 from ..utils.safe_id import safe_id, safe_path_under
 from .lightrag_tools import (
     LightRAGToolsService,
@@ -2303,6 +2304,10 @@ class ReportManager:
 
         # 构建章节Markdown内容 - 清理可能存在的重复标题
         cleaned_content = cls._clean_section_content(section.content, section.title)
+        # Fix M8: Server-side HTML-Sanitisierung. Strippt Inline-<script>,
+        # <iframe>, on*-Handler und andere XSS-Vektoren aus LLM-Output.
+        # Defense-in-Depth zu H1 (Frontend marked+DOMPurify).
+        cleaned_content = sanitize_markdown(cleaned_content)
         md_content = f"## {section.title}\n\n"
         if cleaned_content:
             md_content += f"{cleaned_content}\n\n"
@@ -2473,10 +2478,16 @@ class ReportManager:
         sections = cls.get_generated_sections(report_id)
         for section_info in sections:
             md_content += section_info["content"]
-        
+
         # 后处理：清理整个报告的标题问题
         md_content = cls._post_process_report(md_content, outline)
-        
+
+        # Fix M8: Final-Sanitisierung des kompletten Reports. Doppelt
+        # gehaengt — auch wenn Sektionen schon einzeln durchgegangen
+        # sind (s. ``save_section_to_file``), schuetzt der zweite Pass
+        # gegen Markdown-Reassembly-Tricks und Legacy-Inhalte.
+        md_content = sanitize_markdown(md_content)
+
         # 保存完整报告
         full_path = cls._get_report_markdown_path(report_id)
         with open(full_path, 'w', encoding='utf-8') as f:
