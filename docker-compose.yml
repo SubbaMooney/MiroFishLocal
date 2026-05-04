@@ -19,6 +19,26 @@ services:
     # Verhindert Privilege-Escalation via setuid/setgid Binaries
     security_opt:
       - "no-new-privileges:true"
+    # Read-only Root-FS: der gesamte Container-FS ist nicht beschreibbar.
+    # Gezielt schreibbare Pfade werden ueber Volumes (uploads, logs) und
+    # tmpfs (ephemere Caches) freigegeben. Verhindert dass ein RCE
+    # Binaries oder Python-Files im Container persistieren kann.
+    read_only: true
+    # Ephemere Schreibpfade (tmpfs, in-memory, nicht persistent):
+    #   /tmp                     — Python tempfile, PyMuPDF tmp-IO etc.
+    #   /home/mirofish           — uv/pip-Cache des Non-Root-Users (C7)
+    #   /app/frontend/.vite      — Vite-Dev-Cache (npm run dev)
+    #   /app/frontend/node_modules/.vite — Vite-Dep-Pre-Bundling
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+      - /home/mirofish:size=256m,mode=0700,uid=1000,gid=1000
+      - /app/frontend/.vite:size=128m,mode=0755,uid=1000,gid=1000
+      - /app/frontend/node_modules/.vite:size=128m,mode=0755,uid=1000,gid=1000
     restart: unless-stopped
     volumes:
+      # Persistente Schreibpfade (User-Daten):
       - ./backend/uploads:/app/backend/uploads
+      # Backend schreibt RotatingFileHandler-Logs nach /app/backend/logs
+      # (siehe backend/app/utils/logger.py:27). Bei read_only Root muss
+      # dieser Pfad explizit beschreibbar gemountet werden.
+      - ./backend/logs:/app/backend/logs

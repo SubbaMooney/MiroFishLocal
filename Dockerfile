@@ -2,8 +2,10 @@ FROM python:3.11
 
 # Security-Hardening (SECURITY-AUDIT C7):
 # Dedizierter Non-Root-User, damit ein RCE im Container nicht direkt root erhält.
-RUN groupadd -r mirofish \
-  && useradd -r -g mirofish -m -d /home/mirofish -s /bin/bash mirofish
+# Explizite UID/GID 1000, damit docker-compose tmpfs-Mounts mit uid=1000/gid=1000
+# (siehe docker-compose.yml read_only-Hardening) deterministisch matchen.
+RUN groupadd -g 1000 mirofish \
+  && useradd -u 1000 -g mirofish -m -d /home/mirofish -s /bin/bash mirofish
 
 # Node.js (>=18) und benoetigte Tools installieren
 RUN apt-get update \
