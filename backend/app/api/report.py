@@ -12,6 +12,7 @@ from . import report_bp
 from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
+from ..services.chat_session import ChatSessionStore, sanitize_user_message
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
@@ -471,53 +472,69 @@ def delete_report(report_id: str):
 @report_bp.route('/chat', methods=['POST'])
 def chat_with_report_agent():
     """
-    与Report Agent对话
-    
-    Report Agent可以在对话中自主调用检索工具来回答问题
-    
+    与Report Agent对话 (H4-Fix: server-side chat history).
+
+    H4-Audit: Vorher hat der Client das ``chat_history``-Array selbst
+    mitgeschickt -- das hat erlaubt, ``assistant``-Rollen mit
+    ``<tool_call>``-Markup einzuschleusen und so Tool-Aufrufe zu
+    triggern. Jetzt verwaltet der Server die Historie persistent
+    pro ``simulation_id`` (siehe ``services.chat_session``); der Client
+    sendet nur noch ``simulation_id`` und ``message``.
+
     请求（JSON）：
         {
-            "simulation_id": "sim_xxxx",        // 必填，模拟ID
-            "message": "请解释一下舆情走向",    // 必填，用户消息
-            "chat_history": [                   // 可选，对话历史
-                {"role": "user", "content": "..."},
-                {"role": "assistant", "content": "..."}
-            ]
+            "simulation_id": "sim_xxxx",        // 必填
+            "message": "请解释一下舆情走向"     // 必填
         }
-    
+
+    Hinweis: Etwaige ``chat_history`` aus dem Body werden ignoriert.
+    Auch ``role`` aus dem Body wird ignoriert -- die Server-Logik
+    setzt User- und Assistant-Rollen selbst.
+
     返回：
         {
             "success": true,
             "data": {
                 "response": "Agent回复...",
                 "tool_calls": [调用的工具列表],
-                "sources": [信息来源]
+                "sources": [信息来源],
+                "history": [...]   // volle persistierte History,
+                                   // read-only fuer den Client
             }
         }
     """
     try:
         data = request.get_json() or {}
-        
+
         simulation_id = data.get('simulation_id')
-        message = data.get('message')
-        chat_history = data.get('chat_history', [])
-        
+        raw_message = data.get('message')
+
         if not simulation_id:
             return jsonify({
                 "success": False,
                 "error": t('api.requireSimulationId')
             }), 400
 
-        if not message:
+        if not raw_message:
             return jsonify({
                 "success": False,
                 "error": t('api.requireMessage')
             }), 400
-        
+
+        # H4: Sanitize User-Input -- Tool-Call-Markup raus, Laenge cappen,
+        # Format pruefen. Wirft ValueError bei leerer/nicht-string Message.
+        try:
+            message = sanitize_user_message(raw_message)
+        except ValueError as exc:
+            return jsonify({
+                "success": False,
+                "error": str(exc),
+            }), 400
+
         # 获取模拟和项目信息
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
-        
+
         if not state:
             return jsonify({
                 "success": False,
@@ -530,32 +547,101 @@ def chat_with_report_agent():
                 "success": False,
                 "error": t('api.projectNotFound', id=state.project_id)
             }), 404
-        
+
         graph_id = state.graph_id or project.graph_id
         if not graph_id:
             return jsonify({
                 "success": False,
                 "error": t('api.missingGraphId')
             }), 400
-        
+
         simulation_requirement = project.simulation_requirement or ""
-        
+
+        # H4: persistierte History laden (server-trusted) und User-Message
+        # *vor* dem Agent-Call anhaengen, damit sie auch bei Agent-Fehler
+        # erhalten bleibt.
+        ChatSessionStore.append(simulation_id, 'user', message)
+        history = ChatSessionStore.load(simulation_id)
+        # Letzte ist die User-Message selbst -- Agent erwartet History
+        # *ohne* die aktuelle Frage.
+        history_for_agent = [
+            {'role': m['role'], 'content': m['content']}
+            for m in history[:-1]
+        ]
+
         # 创建Agent并进行对话
         agent = ReportAgent(
             graph_id=graph_id,
             simulation_id=simulation_id,
             simulation_requirement=simulation_requirement
         )
-        
-        result = agent.chat(message=message, chat_history=chat_history)
-        
+
+        result = agent.chat(message=message, chat_history=history_for_agent)
+
+        # H4: Assistant-Antwort ebenfalls server-seitig persistieren.
+        response_text = (result or {}).get('response', '') if isinstance(result, dict) else ''
+        if response_text:
+            ChatSessionStore.append(simulation_id, 'assistant', response_text)
+
+        # Volle History (read-only) zurueckgeben, damit Client sie ohne
+        # eigenes State-Management rendern kann.
+        full_history = ChatSessionStore.load(simulation_id)
+        result_payload = dict(result) if isinstance(result, dict) else {'response': str(result)}
+        result_payload['history'] = full_history
+
         return jsonify({
             "success": True,
-            "data": result
+            "data": result_payload
         })
-        
+
     except Exception as e:
         logger.error(f"对话失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@report_bp.route('/chat/history/<simulation_id>', methods=['GET'])
+def get_chat_history(simulation_id: str):
+    """Liefert die persistierte Chat-Historie fuer eine Simulation.
+
+    Wird vom Frontend beim Oeffnen von Step5 aufgerufen, damit der
+    Client nicht selbst State halten muss.
+    """
+    try:
+        history = ChatSessionStore.load(simulation_id)
+        return jsonify({
+            "success": True,
+            "data": {"history": history},
+        })
+    except ValueError as exc:
+        # safe_id-Verstoss -> 400.
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 400
+    except Exception as e:
+        logger.error(f"获取对话历史失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@report_bp.route('/chat/history/<simulation_id>', methods=['DELETE'])
+def clear_chat_history(simulation_id: str):
+    """Loescht die persistierte Chat-Historie."""
+    try:
+        ChatSessionStore.reset(simulation_id)
+        return jsonify({"success": True})
+    except ValueError as exc:
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 400
+    except Exception as e:
+        logger.error(f"清空对话历史失败: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e)

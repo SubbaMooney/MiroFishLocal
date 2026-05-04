@@ -600,28 +600,31 @@ const sendMessage = async () => {
 
 const sendToReportAgent = async (message) => {
   addLog(t('log.sendToReportAgent', { message: message.substring(0, 50) }))
-  
-  // Build chat history for API
-  const historyForApi = chatHistory.value
-    .filter(msg => msg.role !== 'user' || msg.content !== message)
-    .slice(-10) // Keep last 10 messages
-    .map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }))
-  
+
+  // H4-Fix: Server haelt die kanonische Chat-Historie. Wir schicken
+  // nur die neue User-Message und ueberschreiben unsere lokale
+  // chatHistory aus der Antwort -- damit fliegt jeglicher
+  // client-injizierter assistant-State raus.
   const res = await chatWithReport({
     simulation_id: props.simulationId,
     message: message,
-    chat_history: historyForApi
   })
-  
+
   if (res.success && res.data) {
-    chatHistory.value.push({
-      role: 'assistant',
-      content: res.data.response || res.data.answer || t('step5.noResponse'),
-      timestamp: new Date().toISOString()
-    })
+    if (Array.isArray(res.data.history)) {
+      chatHistory.value = res.data.history.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.ts || new Date().toISOString(),
+      }))
+    } else {
+      // Defensiver Fallback (z. B. alte Server-Version ohne history).
+      chatHistory.value.push({
+        role: 'assistant',
+        content: res.data.response || res.data.answer || t('step5.noResponse'),
+        timestamp: new Date().toISOString(),
+      })
+    }
     addLog(t('log.reportAgentReplied'))
   } else {
     throw new Error(res.error || t('step5.requestFailed'))
