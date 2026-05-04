@@ -183,6 +183,16 @@ class Config:
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
 
+    # Subprozess-Quota (H5): MiroFish ist ein Single-User-System (siehe
+    # CLAUDE.md). Diese Limits sind Self-Protection gegen versehentliches
+    # Spawning von zu vielen Simulationen und gegen Worker, die in
+    # Endlosschleifen Ressourcen fressen. Auf Windows fallen die
+    # rlimit-basierten Limits graceful aus (preexec_fn ist POSIX-only).
+    MAX_CONCURRENT_SIMULATIONS = int(os.environ.get('MAX_CONCURRENT_SIMULATIONS', '2'))
+    SIMULATION_MAX_MEMORY_MB = int(os.environ.get('SIMULATION_MAX_MEMORY_MB', '4096'))
+    SIMULATION_MAX_CPU_SECONDS = int(os.environ.get('SIMULATION_MAX_CPU_SECONDS', '3600'))
+    SIMULATION_MAX_WALL_SECONDS = int(os.environ.get('SIMULATION_MAX_WALL_SECONDS', '7200'))
+
     # OASIS平台可用动作配置（Single Source of Truth: app.oasis_actions）
     # Worker 脚本（backend/scripts/run_*_simulation.py）也从同一来源读取，
     # 防止配置漂移。详见 backend/app/oasis_actions.py 模块说明。

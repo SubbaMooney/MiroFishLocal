@@ -34,6 +34,65 @@ _cleanup_registered = False
 IS_WINDOWS = sys.platform == 'win32'
 
 
+class SimulationQuotaExceeded(Exception):
+    """H5: Wird geworfen, wenn die maximale Zahl gleichzeitiger Simulationen erreicht ist.
+
+    Wird in der API-Schicht in eine 429-Antwort uebersetzt.
+    """
+
+
+def _build_preexec_fn():
+    """H5: Liefert eine ``preexec_fn``, die im Subprozess RLIMIT_AS und
+    RLIMIT_CPU setzt — oder ``None`` auf Windows.
+
+    Werte kommen aus ``Config.SIMULATION_MAX_MEMORY_MB`` und
+    ``Config.SIMULATION_MAX_CPU_SECONDS``. ``preexec_fn`` laeuft im Kind
+    direkt vor ``exec`` und kann nicht ohne weiteres aus dem Eltern-Prozess
+    monkey-gepatched werden — Tests verwenden stattdessen den
+    ``_PREEXEC_BUILDER``-Hook, siehe unten.
+
+    Hinweise:
+
+    - ``RLIMIT_AS`` (Adressraum) ist konservativer als ``RLIMIT_DATA`` und
+      bremst groessere mmap-Allocations zuverlaessig.
+    - ``RLIMIT_CPU`` zaehlt CPU-Sekunden, nicht Wall-Clock. Der Watchdog
+      (``_kill_after_wall_clock_timeout``) ergaenzt Wall-Clock.
+    """
+    if IS_WINDOWS:
+        # Auf Windows kein preexec_fn-Aequivalent fuer rlimits.
+        # JobObjects waeren der korrekte Weg, sind hier aber out-of-scope.
+        return None
+
+    try:
+        import resource  # POSIX-only
+    except ImportError:
+        return None
+
+    mem_bytes = Config.SIMULATION_MAX_MEMORY_MB * 1024 * 1024
+    cpu_secs = Config.SIMULATION_MAX_CPU_SECONDS
+
+    def _set_limits():
+        # Best-effort: einzelne setrlimit-Fehler duerfen den Subprozess-Start
+        # nicht killen, sonst sperren wir den User aus, falls die Plattform
+        # das Limit nicht unterstuetzt.
+        try:
+            resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
+        except (ValueError, OSError):
+            pass
+        try:
+            resource.setrlimit(resource.RLIMIT_CPU, (cpu_secs, cpu_secs))
+        except (ValueError, OSError):
+            pass
+
+    return _set_limits
+
+
+# Test-Hook: Tests koennen ``_PREEXEC_BUILDER`` durch ihren eigenen Builder
+# ersetzen, um zu verifizieren dass die Limits korrekt gesetzt werden,
+# ohne tatsaechlich einen Subprozess zu starten.
+_PREEXEC_BUILDER = _build_preexec_fn
+
+
 class RunnerStatus(str, Enum):
     """运行器状态"""
     IDLE = "idle"
@@ -227,7 +286,67 @@ class SimulationRunner:
     
     # 图谱记忆更新配置
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
-    
+
+    # H5: Wall-Clock-Watchdog-Threads pro Simulation.
+    _watchdog_threads: Dict[str, threading.Thread] = {}
+
+    @classmethod
+    def _count_active_processes(cls) -> int:
+        """H5: Zaehlt laufende Subprozesse, ohne Zombies/finished mitzuzaehlen.
+
+        ``_processes`` haelt die Popen-Handles. ``poll()`` gibt ``None``
+        zurueck wenn der Prozess noch laeuft. Wir filtern hier auch
+        Eintraege heraus, deren Prozess bereits terminiert ist — sonst
+        wuerde ein Crash-Loop das Limit kuenstlich auffuellen.
+        """
+        active = 0
+        for proc in list(cls._processes.values()):
+            try:
+                if proc.poll() is None:
+                    active += 1
+            except (OSError, ValueError):
+                # Defensive: poll() kann nach Stream-Close ValueError werfen.
+                pass
+        return active
+
+    @classmethod
+    def _start_wall_clock_watchdog(
+        cls, simulation_id: str, process: subprocess.Popen
+    ) -> None:
+        """H5: Startet einen Daemon-Thread, der den Subprozess nach
+        ``Config.SIMULATION_MAX_WALL_SECONDS`` aggressiv killt.
+
+        ``process.kill()`` schickt SIGKILL; in Kombination mit
+        ``start_new_session=True`` reicht das, weil das Monitor-Loop
+        spaeter den Status auf FAILED setzt. Ein Wert <= 0 deaktiviert
+        den Watchdog (z. B. fuer Tests, die nicht warten wollen).
+        """
+        timeout = Config.SIMULATION_MAX_WALL_SECONDS
+        if timeout is None or timeout <= 0:
+            return
+
+        def _watchdog():
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    f"Simulation {simulation_id} hat Wall-Clock-Limit von "
+                    f"{timeout}s ueberschritten — sende SIGKILL"
+                )
+                try:
+                    process.kill()
+                except Exception as exc:  # pragma: no cover — best-effort
+                    logger.error(
+                        f"SIGKILL fuer Simulation {simulation_id} fehlgeschlagen: {exc}"
+                    )
+            except Exception:  # pragma: no cover
+                # Watchdog soll niemals den Server crashen.
+                pass
+
+        thread = threading.Thread(target=_watchdog, daemon=True)
+        thread.start()
+        cls._watchdog_threads[simulation_id] = thread
+
     @classmethod
     def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
         """获取运行状态"""
@@ -337,6 +456,21 @@ class SimulationRunner:
         if existing and existing.runner_status in [RunnerStatus.RUNNING, RunnerStatus.STARTING]:
             raise ValueError(f"模拟已在运行中: {simulation_id}")
 
+        # H5: Concurrency-Limit. MiroFish ist Single-User; das Limit ist
+        # Self-Protection (CPU/Memory/LLM-Budget) und keine
+        # Multi-Tenant-Quota. ``_count_active_processes`` raeumt unter
+        # der Hand finished/zombied Prozesse aus, damit Restart-Schleifen
+        # nicht das Limit kuenstlich aufblasen.
+        active = cls._count_active_processes()
+        if active >= Config.MAX_CONCURRENT_SIMULATIONS:
+            raise SimulationQuotaExceeded(
+                f"Maximum {Config.MAX_CONCURRENT_SIMULATIONS} gleichzeitige "
+                f"Simulationen erreicht (aktiv: {active}). Bitte vor dem "
+                "Start einer neuen Simulation eine laufende stoppen "
+                "(/api/simulation/stop) oder die Umgebungsvariable "
+                "MAX_CONCURRENT_SIMULATIONS erhoehen."
+            )
+
         # C6-Fix: simulation_id und alle abgeleiteten Pfade gegen den
         # realen Sim-Root validieren, bevor sie an subprocess gereicht werden.
         # Vor dem Fix konnte ``--config`` auf beliebige Dateien zeigen.
@@ -443,8 +577,13 @@ class SimulationRunner:
             
             # 设置工作目录为模拟目录（数据库等文件会生成在此）
             # 使用 start_new_session=True 创建新的进程组，确保可以通过 os.killpg 终止所有子进程
-            process = subprocess.Popen(
-                cmd,
+            #
+            # H5: preexec_fn setzt RLIMIT_AS / RLIMIT_CPU im Subprozess
+            # (POSIX-only). Auf Windows liefert ``_PREEXEC_BUILDER`` ``None``
+            # zurueck und subprocess.Popen ignoriert das Argument.
+            preexec_fn = _PREEXEC_BUILDER()
+            popen_kwargs = dict(
+                cmd=cmd,
                 cwd=sim_dir,
                 stdout=main_log_file,
                 stderr=subprocess.STDOUT,  # stderr 也写入同一个文件
@@ -454,6 +593,17 @@ class SimulationRunner:
                 env=env,  # 传递带有 UTF-8 设置的环境变量
                 start_new_session=True,  # 创建新进程组，确保服务器关闭时能终止所有相关进程
             )
+            if preexec_fn is not None:
+                popen_kwargs['preexec_fn'] = preexec_fn
+
+            process = subprocess.Popen(
+                popen_kwargs.pop('cmd'),
+                **popen_kwargs,
+            )
+
+            # H5: Wall-Clock-Watchdog. RLIMIT_CPU zaehlt nur CPU-Zeit; ein
+            # idle-laufender Prozess kann den Server trotzdem ewig blockieren.
+            cls._start_wall_clock_watchdog(simulation_id, process)
             
             # 保存文件句柄以便后续关闭
             cls._stdout_files[simulation_id] = main_log_file
