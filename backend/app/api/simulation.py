@@ -1982,6 +1982,47 @@ def get_agent_stats(simulation_id: str):
 
 # ============== 数据库查询接口 ==============
 
+# H9-Fix: Allow-Lists fuer aus OASIS-DB zurueckgegebene Felder.
+# Vorher liefen die Endpoints mit ``SELECT *``, was bei OASIS-Schema-Aenderungen
+# unbeabsichtigt neue/interne Felder an den Client leaken wuerde. Wir
+# selektieren explizit und filtern Response-seitig nochmal gegen dieselbe
+# Liste (Defense-in-Depth, falls jemals jemand die SQL-Liste lockert).
+# Kommentar zu H1: ``content`` ist LLM-generiert und kann Markup enthalten.
+# Das Frontend sanitized den Wert via DOMPurify (H1 behoben), daher ist
+# der Wert hier nicht zusaetzlich zu strippen — aber der Maintenance-Hinweis
+# bleibt: keinen rohen ``v-html``-Renderer ohne Sanitizer wieder einfuehren.
+_POST_FIELDS = (
+    "post_id",
+    "user_id",
+    "content",
+    "created_at",
+    "num_likes",
+    "num_dislikes",
+    "num_shares",
+)
+
+_COMMENT_FIELDS = (
+    "comment_id",
+    "post_id",
+    "user_id",
+    "content",
+    "created_at",
+    "num_likes",
+    "num_dislikes",
+)
+
+
+def _filter_row_to_allowlist(row: dict, allowlist: tuple) -> dict:
+    """Behaelt nur Felder, die in der Allow-List stehen.
+
+    Defense-in-Depth fuer den Fall, dass ``SELECT`` versehentlich (z. B.
+    durch einen spaeteren Refactor) doch wieder ein nicht-whitelisted Feld
+    zurueckliefert, oder dass OASIS ein Feld unter dem gleichen Namen
+    introduziert.
+    """
+    return {key: row.get(key) for key in allowlist if key in row}
+
+
 @simulation_bp.route('/<simulation_id>/posts', methods=['GET'])
 @require_resource('simulation', 'simulation_id')
 def get_simulation_posts(simulation_id: str):
@@ -2033,17 +2074,25 @@ def get_simulation_posts(simulation_id: str):
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT * FROM post 
-                ORDER BY created_at DESC 
-                LIMIT ? OFFSET ?
-            """, (limit, offset))
-            
-            posts = [dict(row) for row in cursor.fetchall()]
-            
+            # H9-Fix: explizite Spaltenauswahl statt SELECT *. Falls eine
+            # Spalte im OASIS-Schema fehlt, faellt sqlite3 in den
+            # OperationalError-Branch unten und wir antworten mit leerer
+            # Liste statt 500. Die Allow-List ``_POST_FIELDS`` ist
+            # Single-Source-of-Truth.
+            cursor.execute(
+                f"SELECT {', '.join(_POST_FIELDS)} FROM post "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+
+            posts = [
+                _filter_row_to_allowlist(dict(row), _POST_FIELDS)
+                for row in cursor.fetchall()
+            ]
+
             cursor.execute("SELECT COUNT(*) FROM post")
             total = cursor.fetchone()[0]
-            
+
         except sqlite3.OperationalError:
             posts = []
             total = 0
@@ -2112,22 +2161,29 @@ def get_simulation_comments(simulation_id: str):
         cursor = conn.cursor()
         
         try:
+            # H9-Fix: explizite Spaltenauswahl statt SELECT *.
+            # ``_COMMENT_FIELDS`` ist Single-Source-of-Truth — neue OASIS-
+            # Felder leaken nicht ungewollt an den Client.
+            select_cols = ", ".join(_COMMENT_FIELDS)
             if post_id:
-                cursor.execute("""
-                    SELECT * FROM comment 
-                    WHERE post_id = ?
-                    ORDER BY created_at DESC 
-                    LIMIT ? OFFSET ?
-                """, (post_id, limit, offset))
+                cursor.execute(
+                    f"SELECT {select_cols} FROM comment "
+                    "WHERE post_id = ? ORDER BY created_at DESC "
+                    "LIMIT ? OFFSET ?",
+                    (post_id, limit, offset),
+                )
             else:
-                cursor.execute("""
-                    SELECT * FROM comment 
-                    ORDER BY created_at DESC 
-                    LIMIT ? OFFSET ?
-                """, (limit, offset))
-            
-            comments = [dict(row) for row in cursor.fetchall()]
-            
+                cursor.execute(
+                    f"SELECT {select_cols} FROM comment "
+                    "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                )
+
+            comments = [
+                _filter_row_to_allowlist(dict(row), _COMMENT_FIELDS)
+                for row in cursor.fetchall()
+            ]
+
         except sqlite3.OperationalError:
             comments = []
         
