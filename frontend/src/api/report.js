@@ -44,8 +44,38 @@ export const getReport = (reportId) => {
 
 /**
  * 与 Report Agent 对话
- * @param {Object} data - { simulation_id, message, chat_history? }
+ *
+ * H4-Fix: chat_history wird seit der server-side Chat-Session-Migration
+ * NICHT mehr vom Client geliefert -- der Server haelt die kanonische
+ * Historie pro simulation_id. Der Body enthaelt nur noch die neue
+ * User-Message; die Antwort enthaelt die volle persistierte History
+ * unter ``data.history``.
+ *
+ * @param {Object} data - { simulation_id, message }
  */
 export const chatWithReport = (data) => {
-  return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
+  // Defense-in-Depth: falls der Caller versehentlich chat_history
+  // mitschickt, wird sie hier herausgefiltert. Der Server ignoriert
+  // sie ebenfalls -- aber so ist das API-Vertrags-Versprechen
+  // auch lokal sichtbar.
+  const safeBody = {
+    simulation_id: data.simulation_id,
+    message: data.message,
+  }
+  return requestWithRetry(() => service.post('/api/report/chat', safeBody), 3, 1000)
+}
+
+/**
+ * Liefert die persistierte Chat-Historie fuer eine Simulation.
+ * Wird beim Oeffnen von Step5 geladen, damit der Client State-Free bleibt.
+ */
+export const getChatHistory = (simulationId) => {
+  return service.get(`/api/report/chat/history/${simulationId}`)
+}
+
+/**
+ * Loescht die persistierte Chat-Historie.
+ */
+export const clearChatHistory = (simulationId) => {
+  return service.delete(`/api/report/chat/history/${simulationId}`)
 }
