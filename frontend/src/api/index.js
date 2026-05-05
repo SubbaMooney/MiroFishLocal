@@ -1,5 +1,6 @@
 import axios from 'axios'
 import i18n from '../i18n'
+import { notify } from '../utils/notify'
 
 // 创建axios实例
 const service = axios.create({
@@ -96,6 +97,32 @@ service.interceptors.response.use(
         error.message ||
         null
       const safeErr = buildSafeError(error.response.status, rawServerError)
+
+      // UX-429: Rate-Limit oder Simulations-Quota — User-freundliche
+      // Toast-Notification anzeigen. Server liefert ggf. error_code
+      // (z.B. "simulation_quota_exceeded") und Retry-After-Header.
+      if (error.response.status === 429) {
+        const errorCode = error.response.data?.error_code || null
+        const retryAfter = parseInt(
+          error.response.headers?.['retry-after'] || '0',
+          10
+        )
+        const waitSec = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter
+          : null
+        let toastMsg
+        if (errorCode === 'simulation_quota_exceeded') {
+          toastMsg = 'Simulations-Limit erreicht — bitte warten, bis eine laufende Simulation endet.'
+        } else if (waitSec) {
+          toastMsg = `Zu viele Anfragen — bitte ${waitSec}s warten.`
+        } else {
+          toastMsg = 'Zu viele Anfragen — bitte kurz warten.'
+        }
+        notify({ level: 'warn', message: toastMsg, timeoutMs: 8000 })
+        safeErr.errorCode = errorCode
+        safeErr.retryAfterSec = waitSec
+      }
+
       console.error('Response error:', safeErr.statusCode, safeErr.serverError)
       return Promise.reject(safeErr)
     }

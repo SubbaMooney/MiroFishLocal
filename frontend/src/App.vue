@@ -1,9 +1,11 @@
 <template>
   <router-view />
+  <ToastHost />
 </template>
 
 <script setup>
 // 使用 Vue Router 来管理页面
+import ToastHost from './components/ToastHost.vue'
 </script>
 
 <style>
