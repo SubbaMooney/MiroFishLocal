@@ -27,9 +27,14 @@ class LLMClient:
         if not self.api_key:
             raise ValueError("LLM_API_KEY 未配置")
         
+        # L1 (Audit): expliziter Timeout + max_retries, sonst hangt der
+        # Worker-Thread bis zum openai-Default 600s wenn der Provider
+        # nicht antwortet.
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url
+            base_url=self.base_url,
+            timeout=Config.LLM_TIMEOUT_SECONDS,
+            max_retries=Config.LLM_MAX_RETRIES,
         )
     
     def chat(

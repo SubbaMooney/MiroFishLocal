@@ -31,6 +31,60 @@ def _safe_original_filename(name: str) -> str:
     return sanitized or "uploaded_file"
 
 
+# L6 (Audit): Content-Sniff vor dem Akzeptieren des Uploads. Werkzeug-
+# secure_filename schuetzt nur den Namen; bei Endung ".pdf" mit ELF-Inhalt
+# wuerde das Backend bei spaeteren Verarbeitungsschritten in fitz / Text-
+# Reader stolpern. Wir verlassen uns nicht auf libmagic (zusaetzliche
+# Native-Dep) und checken nur die offensichtlichen Magic-Bytes der
+# whitelisted Endungen plus ein paar binaere Negativ-Marker.
+_PDF_MAGIC = b"%PDF-"
+_BLOCKED_BINARY_MAGICS = (
+    b"\x7fELF",          # Linux Executable
+    b"MZ",               # Windows PE/EXE/DLL
+    b"\xca\xfe\xba\xbe", # Mach-O fat / Java class
+    b"\xfe\xed\xfa\xce", # Mach-O 32 LE
+    b"\xfe\xed\xfa\xcf", # Mach-O 64 LE
+    b"\xcf\xfa\xed\xfe", # Mach-O 64 BE
+    b"PK\x03\x04",       # ZIP / docx / xlsx / jar
+    b"#!",               # Shebang scripts
+)
+
+
+def _validate_upload_content(file_path: str, ext: str) -> None:
+    """Prueft Magic-Bytes gegen die per Endung erwartete Form.
+
+    Wirft ``ValueError`` wenn Inhalt nicht zur Endung passt oder ein
+    binaerer Marker erkannt wird, der definitiv kein Text/PDF ist.
+    """
+    try:
+        with open(file_path, "rb") as fh:
+            head = fh.read(8)
+    except OSError as exc:
+        raise ValueError(f"Datei nicht lesbar: {exc}") from exc
+
+    ext = ext.lower()
+    if ext == ".pdf":
+        if not head.startswith(_PDF_MAGIC):
+            raise ValueError(
+                "PDF-Magic fehlt — Datei ist kein gueltiges PDF"
+            )
+        return
+
+    # TXT / MD / MARKDOWN — keine eindeutige Magic, aber binaere Marker
+    # ausschliessen.
+    if ext in {".txt", ".md", ".markdown"}:
+        for magic in _BLOCKED_BINARY_MAGICS:
+            if head.startswith(magic):
+                raise ValueError(
+                    "Datei enthaelt binaere Marker, kein Text-Inhalt"
+                )
+        return
+
+    # Anderer Fall sollte durch Config.ALLOWED_EXTENSIONS bereits gefiltert
+    # sein; wenn doch durchgerutscht: blocken.
+    raise ValueError(f"Endung {ext!r} nicht in Whitelist")
+
+
 class ProjectStatus(str, Enum):
     """项目状态"""
     CREATED = "created"              # 刚创建，文件已上传
@@ -293,6 +347,18 @@ class ProjectManager:
 
         # 保存文件
         file_storage.save(file_path)
+
+        # L6 (Audit): Magic-Number-Check direkt nach dem Save. Bei
+        # Verletzung loeschen wir die Datei sofort wieder, damit kein
+        # potenziell gefaehrlicher Inhalt in uploads/ liegen bleibt.
+        try:
+            _validate_upload_content(file_path, ext)
+        except ValueError:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+            raise
 
         # 获取文件大小
         file_size = os.path.getsize(file_path)

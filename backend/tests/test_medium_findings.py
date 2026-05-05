@@ -83,8 +83,10 @@ class TestM1FilenameSanitisierung:
         file_storage = MagicMock()
 
         def fake_save(path):
+            # L6-Magic-Check verlangt %PDF-Header — vorher reichte beliebiger
+            # Inhalt fuer den M1-Test; jetzt brauchen wir gueltige Magic-Bytes.
             with open(path, "wb") as f:
-                f.write(b"PDF-CONTENT")
+                f.write(b"%PDF-1.4\nfake-pdf-payload")
 
         file_storage.save.side_effect = fake_save
 

@@ -1001,21 +1001,20 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     if not llm_model:
         llm_model = config.get("llm_model", "gpt-4o-mini")
     
-    # 设置 camel-ai 所需的环境变量
-    if llm_api_key:
-        os.environ["OPENAI_API_KEY"] = llm_api_key
-    
-    if not os.environ.get("OPENAI_API_KEY"):
+    # L9 (Audit): API-Key wird per-Instance an ModelFactory.create
+    # uebergeben — KEIN os.environ["OPENAI_API_KEY"] mehr. Das verhindert,
+    # dass spaetere Logs / Crash-Dumps / drittpartei-Code per
+    # `os.environ`-Dump den Key leakt.
+    if not llm_api_key:
         raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
-    
-    if llm_base_url:
-        os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-    
+
     print(f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
-    
+
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=llm_model,
+        api_key=llm_api_key,
+        url=llm_base_url or None,
     )
 
 

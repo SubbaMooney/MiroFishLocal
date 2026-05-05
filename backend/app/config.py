@@ -124,6 +124,11 @@ class Config:
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
+    # L1 (Audit): expliziter Timeout statt openai-default 600s. 120s reicht
+    # auch fuer langsame Reasoning-Modelle; HTTP-Layer-Hangs werden so
+    # nicht zur Stunden-langen Sperre eines Worker-Threads.
+    LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '120'))
+    LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '2'))
 
     # LightRAG / GraphRAG 配置 (Phase 1-5 Migration komplett — siehe
     # docs/MIGRATION-ZEP-TO-LIGHTRAG.md). Alle Werte sind optional; Pflicht

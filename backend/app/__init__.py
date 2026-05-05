@@ -195,10 +195,10 @@ def create_app(config_class=Config):
             return exc
         return format_error_response(exc)
     
-    # 健康检查
+    # 健康检查 (L4 Audit: minimaler Body, kein Service-Name-Leak fuer Recon).
     @app.route('/health')
     def health():
-        return {'status': 'ok', 'service': 'MiroFish Backend'}
+        return {'status': 'ok'}
     
     if should_log_startup:
         logger.info("MiroFish Backend 启动完成")

@@ -332,19 +332,19 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 
 ### LOW / INFO
 
-| # | Finding | Datei:Zeile |
-|---|---|---|
-| L1 | Kein expliziter Timeout auf OpenAI-Client (Default 600 s) | `utils/llm_client.py:30-33` |
-| L2 | Kein expliziter Timeout auf Zep-Client | `services/zep_*.py` |
-| L3 | `as_attachment=True` ohne `mimetype` — Browser kann Filetype mis-detecten | `report.py:423,429`, `simulation.py:1308,1360` |
-| L4 | `health` Endpoint enthüllt Service-Name → Recon-Hilfe | `__init__.py:72-74` |
-| L5 | `int()` Casting ohne Bounds (`from_line`, `limit`) | `report.py:799,881`, `graph.py:60` |
-| L6 | UUID-only Filename ohne Magic-Number-Check (kein `python-magic`) | `models/project.py:256-262` |
-| L7 | AGPL-3.0 Network-Service-Klausel — Source-Download-Link sollte im Frontend-Footer stehen, falls jemals öffentlich gehostet | `LICENSE`, `frontend/` |
-| L8 | Mermaid-CDN `cdn.jsdelivr.net` in lokaler HTML-Doku → bricht bei Air-Gap | `docs/HTML/*.html` |
-| L9 | `OPENAI_API_KEY` und `OPENAI_API_BASE_URL` werden in Worker global per `os.environ[...]` gesetzt — jede transitiv geladene Library erbt das | `scripts/run_*_simulation.py:442,448,1006,1012` |
-| L10 | Vite-Dev-Proxy hat `secure: false` — gefährlich, falls jemand `target` auf HTTPS umstellt | `frontend/vite.config.js:21` |
-| L11 | Discord-Link in README über HTTP statt HTTPS | `README.md:19` |
+| # | Finding | Datei:Zeile | Status |
+|---|---|---|---|
+| L1 | Kein expliziter Timeout auf OpenAI-Client (Default 600 s) | `utils/llm_client.py:30-33` | Behoben — `Config.LLM_TIMEOUT_SECONDS=120` + `LLM_MAX_RETRIES=2` an `OpenAI()` übergeben |
+| L2 | Kein expliziter Timeout auf Zep-Client | `services/zep_*.py` | Nicht zutreffend — Zep-Module wurden in der LightRAG-Migration (2026-05-03) komplett entfernt |
+| L3 | `as_attachment=True` ohne `mimetype` — Browser kann Filetype mis-detecten | `report.py:423,429`, `simulation.py:1308,1360` | Behoben in H8 (`9f2bd35`) — explizites `mimetype='text/markdown; charset=utf-8'` |
+| L4 | `health` Endpoint enthüllt Service-Name → Recon-Hilfe | `__init__.py:72-74` | Behoben — Body reduziert auf `{'status': 'ok'}` |
+| L5 | `int()` Casting ohne Bounds (`from_line`, `limit`) | `report.py:799,881`, `graph.py:60` | Obsolet — Routes refactored, betroffene Stellen existieren nicht mehr; Bounds werden zusätzlich durch Pydantic-Schemas (M6, `4df1736`) erzwungen |
+| L6 | UUID-only Filename ohne Magic-Number-Check (kein `python-magic`) | `models/project.py:256-262` | Behoben — `_validate_upload_content` mit Magic-Whitelist für PDF und Binary-Blacklist für TXT/MD |
+| L7 | AGPL-3.0 Network-Service-Klausel — Source-Download-Link sollte im Frontend-Footer stehen, falls jemals öffentlich gehostet | `LICENSE`, `frontend/` | Behoben — `AgplFooter.vue` global gemounted, Source-URL über `VITE_SOURCE_URL` überschreibbar |
+| L8 | Mermaid-CDN `cdn.jsdelivr.net` in lokaler HTML-Doku → bricht bei Air-Gap | `docs/HTML/*.html` | Dokumentiert — `docs/HTML/vendor/README.md` enthält Manual-Vendor-Anleitung + SRI-Variante; CDN bleibt Default für Online-Nutzung |
+| L9 | `OPENAI_API_KEY` und `OPENAI_API_BASE_URL` werden in Worker global per `os.environ[...]` gesetzt — jede transitiv geladene Library erbt das | `scripts/run_*_simulation.py:442,448,1006,1012` | Behoben — `ModelFactory.create(api_key=..., url=...)` per-Instance, kein `os.environ`-Setzen mehr |
+| L10 | Vite-Dev-Proxy hat `secure: false` — gefährlich, falls jemand `target` auf HTTPS umstellt | `frontend/vite.config.js:21` | Behoben — `secure: false` entfernt, Vite-Default `secure: true` greift bei HTTPS-Targets automatisch |
+| L11 | Discord-Link in README über HTTP statt HTTPS | `README.md:19` | Offen — kosmetisch, nicht sicherheitsrelevant; bei nächstem README-Refresh mit erledigen |
 | INFO | IPC `simulation_ipc.py` nutzt nur `json.load`/`json.dump` — kein Pickle, kein YAML.unsafe_load | `services/simulation_ipc.py` |
 | INFO | Git-History sauber: keine `sk-…`-Strings, keine getrackte `.env` | — |
 | INFO | Dependency-Versionen current: `flask 3.1.2`, `werkzeug 3.1.4`, `openai 1.109.1`, `pymupdf 1.26.7`, `axios ^1.14.0`, `vue 3.5.x`, `vite 7.x` — keine offenen kritischen CVEs | `backend/uv.lock`, `frontend/package.json` |
@@ -360,7 +360,7 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 | A02 Cryptographic Failures | OK | C4 behoben |
 | A03 Injection | OK | H1, H2, H4, M6, M8 alle behoben |
 | A04 Insecure Design | OK | C1, H5, H6, H7, M6 behoben |
-| A05 Security Misconfiguration | OK | C2, C3, C5, C7, M3, M5 behoben; nur LOW-Findings (L1–L4) bleiben |
+| A05 Security Misconfiguration | OK | C2, C3, C5, C7, M3, M5 behoben; LOW-Findings L1/L4/L10 ebenfalls behoben, L11 nur kosmetisch |
 | A06 Vulnerable Components | OK (current) | `pip-audit` + `npm audit` in CI empfohlen |
 | A07 Auth Failures | OK | C1 behoben |
 | A08 Software & Data Integrity | OK | M10 behoben (kein Pickle in IPC) |

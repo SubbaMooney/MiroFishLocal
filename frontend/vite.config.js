@@ -15,10 +15,13 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
+      // L10 (Audit): kein 'secure: false' — Target ist http (kein TLS),
+      // der Vite-Default 'secure: true' greift nur fuer https-Targets.
+      // Falls jemand das Target auf https aendert, soll der TLS-Check
+      // aktiv bleiben.
       '/api': {
         target: 'http://localhost:5001',
-        changeOrigin: true,
-        secure: false
+        changeOrigin: true
       }
     }
   }

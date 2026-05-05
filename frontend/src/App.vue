@@ -1,11 +1,13 @@
 <template>
   <router-view />
   <ToastHost />
+  <AgplFooter />
 </template>
 
 <script setup>
 // 使用 Vue Router 来管理页面
 import ToastHost from './components/ToastHost.vue'
+import AgplFooter from './components/AgplFooter.vue'
 </script>
 
 <style>

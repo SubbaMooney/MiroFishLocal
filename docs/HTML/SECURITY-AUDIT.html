@@ -479,21 +479,21 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <h3><span class="badge badge-low">LOW / INFO</span></h3>
 
 <table>
-  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th></tr></thead>
+  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td>L1</td><td>Kein expliziter Timeout auf OpenAI-Client (Default 600 s)</td><td><code>utils/llm_client.py:30-33</code></td></tr>
-    <tr><td>L2</td><td>Kein expliziter Timeout auf Zep-Client</td><td><code>services/zep_*.py</code></td></tr>
-    <tr><td>L3</td><td><code>as_attachment=True</code> ohne <code>mimetype</code></td><td><code>report.py:423,429</code></td></tr>
-    <tr><td>L4</td><td><code>health</code> Endpoint enthüllt Service-Name → Recon-Hilfe</td><td><code>__init__.py:72-74</code></td></tr>
-    <tr><td>L5</td><td><code>int()</code> Casting ohne Bounds</td><td><code>report.py:799,881</code></td></tr>
-    <tr><td>L6</td><td>UUID-only Filename ohne Magic-Number-Check</td><td><code>models/project.py:256-262</code></td></tr>
-    <tr><td>L7</td><td>AGPL-3.0 Network-Service-Klausel — Source-Download-Link sollte im Frontend-Footer stehen</td><td><code>LICENSE</code></td></tr>
-    <tr><td>L8</td><td>Mermaid-CDN <code>cdn.jsdelivr.net</code> in lokaler HTML-Doku → bricht bei Air-Gap</td><td><code>docs/HTML/*.html</code></td></tr>
-    <tr><td>L9</td><td><code>OPENAI_API_KEY</code> wird in Worker global per <code>os.environ[...]</code> gesetzt</td><td><code>scripts/run_*_simulation.py:442,448</code></td></tr>
-    <tr><td>L10</td><td>Vite-Dev-Proxy hat <code>secure: false</code></td><td><code>frontend/vite.config.js:21</code></td></tr>
-    <tr><td>INFO</td><td>IPC <code>simulation_ipc.py</code> nutzt nur <code>json.load</code>/<code>json.dump</code> — kein Pickle</td><td>—</td></tr>
-    <tr><td>INFO</td><td>Git-History sauber: keine <code>sk-…</code>-Strings, keine getrackte <code>.env</code></td><td>—</td></tr>
-    <tr><td>INFO</td><td>Dependencies current: Flask 3.1.2, Werkzeug 3.1.4, openai 1.109.1, PyMuPDF 1.26.7, Vue 3.5.x — keine offenen kritischen CVEs</td><td><code>uv.lock</code>, <code>package.json</code></td></tr>
+    <tr><td>L1</td><td>Kein expliziter Timeout auf OpenAI-Client (Default 600 s)</td><td><code>utils/llm_client.py:30-33</code></td><td>Behoben — <code>Config.LLM_TIMEOUT_SECONDS=120</code> + <code>LLM_MAX_RETRIES=2</code></td></tr>
+    <tr><td>L2</td><td>Kein expliziter Timeout auf Zep-Client</td><td><code>services/zep_*.py</code></td><td>Nicht zutreffend — Zep-Module komplett entfernt (Migration 2026-05-03)</td></tr>
+    <tr><td>L3</td><td><code>as_attachment=True</code> ohne <code>mimetype</code></td><td><code>report.py:423,429</code></td><td>Behoben in H8 (<code>9f2bd35</code>)</td></tr>
+    <tr><td>L4</td><td><code>health</code> Endpoint enthüllt Service-Name → Recon-Hilfe</td><td><code>__init__.py:72-74</code></td><td>Behoben — Body reduziert auf <code>{'status': 'ok'}</code></td></tr>
+    <tr><td>L5</td><td><code>int()</code> Casting ohne Bounds</td><td><code>report.py:799,881</code></td><td>Obsolet — Routes refactored; Bounds via Pydantic-Schemas (M6, <code>4df1736</code>)</td></tr>
+    <tr><td>L6</td><td>UUID-only Filename ohne Magic-Number-Check</td><td><code>models/project.py:256-262</code></td><td>Behoben — <code>_validate_upload_content</code> mit Magic-Whitelist (PDF) + Binary-Blacklist (TXT/MD)</td></tr>
+    <tr><td>L7</td><td>AGPL-3.0 Network-Service-Klausel — Source-Download-Link im Frontend-Footer</td><td><code>LICENSE</code></td><td>Behoben — <code>AgplFooter.vue</code> global gemounted</td></tr>
+    <tr><td>L8</td><td>Mermaid-CDN <code>cdn.jsdelivr.net</code> in lokaler HTML-Doku → bricht bei Air-Gap</td><td><code>docs/HTML/*.html</code></td><td>Dokumentiert — <code>docs/HTML/vendor/README.md</code> mit Manual-Vendor + SRI-Anleitung</td></tr>
+    <tr><td>L9</td><td><code>OPENAI_API_KEY</code> wird in Worker global per <code>os.environ[...]</code> gesetzt</td><td><code>scripts/run_*_simulation.py:442,448</code></td><td>Behoben — <code>ModelFactory.create(api_key=..., url=...)</code> per-Instance</td></tr>
+    <tr><td>L10</td><td>Vite-Dev-Proxy hat <code>secure: false</code></td><td><code>frontend/vite.config.js:21</code></td><td>Behoben — <code>secure: false</code> entfernt, Vite-Default greift</td></tr>
+    <tr><td>INFO</td><td>IPC <code>simulation_ipc.py</code> nutzt nur <code>json.load</code>/<code>json.dump</code> — kein Pickle</td><td>—</td><td>Positiv — keine Aktion noetig</td></tr>
+    <tr><td>INFO</td><td>Git-History sauber: keine <code>sk-…</code>-Strings, keine getrackte <code>.env</code></td><td>—</td><td>Positiv</td></tr>
+    <tr><td>INFO</td><td>Dependencies current: Flask 3.1.2, Werkzeug 3.1.4, openai 1.109.1, PyMuPDF 1.26.7, Vue 3.5.x — keine offenen kritischen CVEs</td><td><code>uv.lock</code>, <code>package.json</code></td><td>Positiv — <code>pip-audit</code> + <code>npm audit</code> als CI-Gate empfohlen</td></tr>
   </tbody>
 </table>
 
@@ -506,7 +506,7 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
     <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-low">OK</span></td><td>C4 behoben</td></tr>
     <tr><td>A03 Injection</td><td><span class="badge badge-low">OK</span></td><td>H1, H2, H4, M6, M8 alle behoben</td></tr>
     <tr><td>A04 Insecure Design</td><td><span class="badge badge-low">OK</span></td><td>C1, H5, H6, H7, M6 behoben</td></tr>
-    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-low">OK</span></td><td>C2, C3, C5, C7, M3, M5 behoben; nur LOW (L1–L4) bleibt</td></tr>
+    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-low">OK</span></td><td>C2, C3, C5, C7, M3, M5 behoben; LOW L1/L4/L10 ebenfalls behoben</td></tr>
     <tr><td>A06 Vulnerable Components</td><td><span class="badge badge-low">OK</span></td><td><code>pip-audit</code> + <code>npm audit</code> in CI empfohlen</td></tr>
     <tr><td>A07 Auth Failures</td><td><span class="badge badge-low">OK</span></td><td>C1 behoben</td></tr>
     <tr><td>A08 Software &amp; Data Integrity</td><td><span class="badge badge-low">OK</span></td><td>M10 behoben (kein Pickle in IPC)</td></tr>
