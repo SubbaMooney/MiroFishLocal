@@ -23,6 +23,8 @@ from ..utils.safe_id import safe_id, safe_path_under
 from ..utils.error_response import format_error_response
 from ..utils.authz import require_resource
 from ..utils.rate_limit import limiter
+from ..utils.validate_body import validate_body
+from ..schemas import SimulationCreateRequest, SimulationStartRequest
 from ..models.project import ProjectManager
 
 logger = get_logger('mirofish.api.simulation')
@@ -153,6 +155,7 @@ def get_entities_by_type(graph_id: str, entity_type: str):
 # ============== 模拟管理接口 ==============
 
 @simulation_bp.route('/create', methods=['POST'])
+@validate_body(SimulationCreateRequest)
 def create_simulation():
     """
     创建新的模拟
@@ -1443,6 +1446,7 @@ def generate_profiles():
 
 @simulation_bp.route('/start', methods=['POST'])
 @limiter.limit(lambda: Config.RATE_LIMIT_SIMULATION_START)
+@validate_body(SimulationStartRequest)
 def start_simulation():
     """
     开始运行模拟

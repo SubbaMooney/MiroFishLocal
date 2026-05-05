@@ -20,6 +20,8 @@ from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 from ..utils.authz import require_resource
 from ..utils.rate_limit import limiter
+from ..utils.validate_body import validate_body
+from ..schemas import GraphBuildRequest, OntologyGenerateRequest
 
 # 获取日志器
 logger = get_logger('mirofish.api')
@@ -264,6 +266,7 @@ def generate_ontology():
 
 @graph_bp.route('/build', methods=['POST'])
 @limiter.limit(lambda: Config.RATE_LIMIT_GRAPH_BUILD)
+@validate_body(GraphBuildRequest)
 def build_graph():
     """
     接口2：根据project_id构建图谱

@@ -19,6 +19,8 @@ from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
 from ..utils.authz import require_resource
 from ..utils.rate_limit import limiter
+from ..utils.validate_body import validate_body
+from ..schemas import ReportChatRequest, ReportGenerateRequest
 
 logger = get_logger('mirofish.api.report')
 
@@ -27,6 +29,7 @@ logger = get_logger('mirofish.api.report')
 
 @report_bp.route('/generate', methods=['POST'])
 @limiter.limit(lambda: Config.RATE_LIMIT_REPORT_GENERATE)
+@validate_body(ReportGenerateRequest)
 def generate_report():
     """
     生成模拟分析报告（异步任务）
@@ -476,6 +479,7 @@ def delete_report(report_id: str):
 
 @report_bp.route('/chat', methods=['POST'])
 @limiter.limit(lambda: Config.RATE_LIMIT_REPORT_CHAT)
+@validate_body(ReportChatRequest)
 def chat_with_report_agent():
     """
     与Report Agent对话 (H4-Fix: server-side chat history).

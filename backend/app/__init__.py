@@ -157,8 +157,11 @@ def create_app(config_class=Config):
     # bequem fuer Tests, die viele Requests schicken.
     from .utils.rate_limit import limiter
     limiter.init_app(app)
-    if not app.config.get('RATE_LIMIT_ENABLED', True):
-        limiter.enabled = False
+    # Limiter ist Modul-Singleton; bei Tests koennen vorherige Apps
+    # ihn auf False gelassen haben. Wir setzen den Zustand pro create_app
+    # explizit, damit Test-Suiten mit gemischten RATE_LIMIT_ENABLED-Flags
+    # nicht aufeinander leaken.
+    limiter.enabled = bool(app.config.get('RATE_LIMIT_ENABLED', True))
 
     # 429-Handler: Limiter wirft RateLimitExceeded; wir vereinheitlichen
     # die Antwort mit unserem error_response-Format (C5).
