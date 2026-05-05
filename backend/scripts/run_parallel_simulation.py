@@ -1015,6 +1015,10 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         model_type=llm_model,
         api_key=llm_api_key,
         url=llm_base_url or None,
+        # Audit-Folge 2026-05-05: erhoehte Retry-Resilienz gegen 429er.
+        # Default war camel-default 3, was bei Rate-Limit-Burst sofort
+        # in "Rate limit exhausted after 3 attempts" + SIGKILL endete.
+        max_retries=int(os.environ.get('OASIS_LLM_MAX_RETRIES', '5')),
     )
 
 
@@ -1137,7 +1141,11 @@ async def run_twitter_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.TWITTER,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+        # OASIS_LLM_CONCURRENCY (Audit-Folge 2026-05-05): bei Tier-1 OpenAI
+        # (500 RPM / 200k TPM fuer gpt-4o-mini) muss die parallele LLM-Last
+        # konservativ sein. Im Parallel-Mode laufen Twitter+Reddit gleichzeitig,
+        # also doppelter Wert. Default 10 pro Platform = 20 total.
+        semaphore=int(os.environ.get('OASIS_LLM_CONCURRENCY', '10')),
     )
     
     await result.env.reset()
@@ -1328,7 +1336,11 @@ async def run_reddit_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+        # OASIS_LLM_CONCURRENCY (Audit-Folge 2026-05-05): bei Tier-1 OpenAI
+        # (500 RPM / 200k TPM fuer gpt-4o-mini) muss die parallele LLM-Last
+        # konservativ sein. Im Parallel-Mode laufen Twitter+Reddit gleichzeitig,
+        # also doppelter Wert. Default 10 pro Platform = 20 total.
+        semaphore=int(os.environ.get('OASIS_LLM_CONCURRENCY', '10')),
     )
     
     await result.env.reset()

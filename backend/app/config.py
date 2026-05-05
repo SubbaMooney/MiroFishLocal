@@ -130,6 +130,17 @@ class Config:
     LLM_TIMEOUT_SECONDS = float(os.environ.get('LLM_TIMEOUT_SECONDS', '120'))
     LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '2'))
 
+    # OASIS-Simulation-Concurrency (Folge des sim-fail mit Rate-Limits am
+    # 2026-05-05). Frueher war 30 hart in den Worker-Scripts; im Parallel-
+    # Mode (Twitter+Reddit gleichzeitig) ergibt das 60 parallele LLM-Calls,
+    # was Tier-1 OpenAI (500 RPM, 200k TPM fuer gpt-4o-mini) reisst.
+    # Default jetzt 10 pro Platform (= 20 parallel im Parallel-Mode), was
+    # auch unter Tier-1 stabil ist. Bei hoeherem Tier ueber ENV erhoehen.
+    OASIS_LLM_CONCURRENCY = int(os.environ.get('OASIS_LLM_CONCURRENCY', '10'))
+    # Mehr Retries als camel-default 3, damit transiente 429er nicht zum
+    # Sim-Crash fuehren. Linear * exponential Backoff im OpenAI-SDK.
+    OASIS_LLM_MAX_RETRIES = int(os.environ.get('OASIS_LLM_MAX_RETRIES', '5'))
+
     # LightRAG / GraphRAG 配置 (Phase 1-5 Migration komplett — siehe
     # docs/MIGRATION-ZEP-TO-LIGHTRAG.md). Alle Werte sind optional; Pflicht
     # werden sie erst, wenn RagManager bzw. lightrag_factory aufgerufen wird.

@@ -449,6 +449,8 @@ class RedditSimulationRunner:
             model_type=llm_model,
             api_key=llm_api_key,
             url=llm_base_url or None,
+            # Audit-Folge 2026-05-05: mehr Retries gegen 429er.
+            max_retries=int(os.environ.get('OASIS_LLM_MAX_RETRIES', '5')),
         )
     
     def _get_active_agents_for_round(
@@ -563,7 +565,9 @@ class RedditSimulationRunner:
             agent_graph=self.agent_graph,
             platform=oasis.DefaultPlatformType.REDDIT,
             database_path=db_path,
-            semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+            # OASIS_LLM_CONCURRENCY (Audit-Folge 2026-05-05): konservativer
+            # Default fuer Tier-1 OpenAI. Per ENV ueberschreibbar.
+            semaphore=int(os.environ.get('OASIS_LLM_CONCURRENCY', '10')),
         )
         
         await self.env.reset()
