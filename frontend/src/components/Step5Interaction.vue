@@ -165,7 +165,7 @@
             </div>
             <div v-if="showToolsDetail" class="tools-card-body">
               <div class="tools-grid">
-                <div class="tool-item tool-purple">
+                <div class="tool-item tool-purple" @click="useToolPrompt('insightForge')" role="button" tabindex="0" @keydown.enter="useToolPrompt('insightForge')">
                   <div class="tool-icon-wrapper">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.5V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.5A7 7 0 0 0 12 2z"></path>
@@ -176,7 +176,7 @@
                     <div class="tool-desc">{{ $t('step5.toolInsightForgeDesc') }}</div>
                   </div>
                 </div>
-                <div class="tool-item tool-blue">
+                <div class="tool-item tool-blue" @click="useToolPrompt('panoramaSearch')" role="button" tabindex="0" @keydown.enter="useToolPrompt('panoramaSearch')">
                   <div class="tool-icon-wrapper">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                       <circle cx="12" cy="12" r="10"></circle>
@@ -188,7 +188,7 @@
                     <div class="tool-desc">{{ $t('step5.toolPanoramaSearchDesc') }}</div>
                   </div>
                 </div>
-                <div class="tool-item tool-orange">
+                <div class="tool-item tool-orange" @click="useToolPrompt('quickSearch')" role="button" tabindex="0" @keydown.enter="useToolPrompt('quickSearch')">
                   <div class="tool-icon-wrapper">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
@@ -199,7 +199,7 @@
                     <div class="tool-desc">{{ $t('step5.toolQuickSearchDesc') }}</div>
                   </div>
                 </div>
-                <div class="tool-item tool-green">
+                <div class="tool-item tool-green" @click="useToolPrompt('interviewSubAgent')" role="button" tabindex="0" @keydown.enter="useToolPrompt('interviewSubAgent')">
                   <div class="tool-icon-wrapper">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -561,6 +561,22 @@ const formatTime = (timestamp) => {
 // ausführbaren Skript-Tags mehr ins DOM injizieren können.
 
 // Chat Methods
+// Klick auf Tool-Karte: Beispiel-Prompt ins Chat-Input einfuellen.
+// Tool-Selection passiert serverseitig im Report-Agent (LLM picks),
+// der Prompt ist nur ein Trigger der das richtige Tool nahelegt.
+const useToolPrompt = (toolKey) => {
+  const promptKey = `step5.toolPrompt_${toolKey}`
+  chatInput.value = t(promptKey)
+  nextTick(() => {
+    const el = chatInputRef.value
+    if (el) {
+      el.focus()
+      const len = el.value.length
+      el.setSelectionRange(len, len)
+    }
+  })
+}
+
 const sendMessage = async () => {
   if (!chatInput.value.trim() || isSending.value) return
   
@@ -1501,10 +1517,24 @@ watch(() => props.simulationId, (newId) => {
   border-radius: 10px;
   border: 1px solid #E5E7EB;
   transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
 }
 
 .tool-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: #C7D2FE;
+  transform: translateY(-1px);
+}
+
+.tool-item:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.tool-item:focus-visible {
+  outline: 2px solid #6366F1;
+  outline-offset: 2px;
 }
 
 .tool-icon-wrapper {
