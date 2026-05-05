@@ -56,6 +56,16 @@ def app_client(tmp_path, monkeypatch):
     from app import create_app
     from app.config import Config
 
+    # Config laedt .env mit override=True und ueberschreibt damit alle
+    # monkeypatch.setenv-Werte. Wir patchen daher Config-Klassen-Vars
+    # direkt nach dem Import — analog zu den anderen Test-Modulen
+    # (test_cors.py, test_input_validation.py etc.).
+    monkeypatch.setattr(Config, 'MIROFISH_API_KEY', 'x' * 40, raising=False)
+    monkeypatch.setattr(Config, 'LLM_API_KEY', 'fake', raising=False)
+    monkeypatch.setattr(Config, 'CORS_ALLOWED_ORIGINS',
+                        ['http://localhost:3000'], raising=False)
+    monkeypatch.setattr(Config, 'SECRET_KEY', 'y' * 32, raising=False)
+
     # Storage-Roots auf den tmp-Pfad zwingen.
     Config.UPLOAD_FOLDER = str(tmp_path / 'uploads')
     os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
