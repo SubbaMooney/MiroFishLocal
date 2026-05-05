@@ -21,7 +21,12 @@ from enum import Enum
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from ..utils.locale import get_language_instruction, t
+from ..utils.locale import (
+    get_language_instruction,
+    get_strong_language_instruction,
+    wrap_prompt_with_language,
+    t,
+)
 from ..utils.markdown_sanitizer import sanitize_markdown
 from ..utils.safe_id import safe_id, safe_path_under
 from .lightrag_tools import (
@@ -1337,7 +1342,10 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, t('progress.generatingOutline'))
         
-        system_prompt = f"{PLAN_SYSTEM_PROMPT}\n\n{get_language_instruction()}"
+        # Sprach-Klammer: Templates sind hartkodiert chinesisch, daher
+        # strikte Sprach-Anweisung VOR und NACH dem Body — sonst mischt
+        # die LLM Sprachen im Output (Audit-Folge 2026-05-05).
+        system_prompt = wrap_prompt_with_language(PLAN_SYSTEM_PROMPT)
         user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
             total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
@@ -1433,7 +1441,9 @@ class ReportAgent:
             section_title=section.title,
             tools_description=self._get_tools_description(),
         )
-        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+        # Sprach-Klammer (Audit 2026-05-05): chinesische Templates +
+        # englischer locale brauchen starke Anweisung VOR und NACH dem Body.
+        system_prompt = wrap_prompt_with_language(system_prompt)
 
         # 构建用户prompt - 每个已完成章节各传入最大4000字
         if previous_sections:
@@ -1450,6 +1460,11 @@ class ReportAgent:
             previous_content=previous_content,
             section_title=section.title,
         )
+        # Sprach-Klammer (Audit 2026-05-05): User-Prompt-Body ist auch
+        # chinesisch hartkodiert. Wir prepend zusaetzlich nur die Anweisung
+        # (kein doppelter Wrap), damit der LLM beim ReACT-Loop am Ende
+        # nicht in Chinesisch faellt.
+        user_prompt = f"{get_strong_language_instruction()}\n\n{user_prompt}"
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -1983,7 +1998,10 @@ class ReportAgent:
             report_content=report_content if report_content else "（暂无报告）",
             tools_description=self._get_tools_description(),
         )
-        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+        # Sprach-Klammer (Audit 2026-05-05): chinesisches Template + Locale
+        # bracket — VOR und NACH dem Body, damit der Chat im richtigen
+        # locale antwortet.
+        system_prompt = wrap_prompt_with_language(system_prompt)
 
         # 构建消息
         messages = [{"role": "system", "content": system_prompt}]

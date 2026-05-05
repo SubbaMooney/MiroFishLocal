@@ -99,3 +99,32 @@ def get_language_instruction() -> str:
     locale = get_locale()
     lang_config = _languages.get(locale, _languages.get('zh', {}))
     return lang_config.get('llmInstruction', '请使用中文回答。')
+
+
+def get_strong_language_instruction() -> str:
+    """Strikte Sprach-Klammer fuer Prompts mit fremdsprachigen Templates.
+
+    Hintergrund: SECTION_USER_PROMPT_TEMPLATE & Co. sind hartkodiert
+    Chinesisch. Wenn der User auf locale=en steht, biased die LLM trotz
+    softem ``llmInstruction``-Suffix oft mit. ``strongInstruction`` ist
+    explizit drohender und enthaelt das Verbot zu mischen.
+    Faellt zurueck auf ``llmInstruction`` wenn nicht definiert.
+    """
+    locale = get_locale()
+    lang_config = _languages.get(locale, _languages.get('zh', {}))
+    return (
+        lang_config.get('strongInstruction')
+        or lang_config.get('llmInstruction')
+        or '请使用中文回答。'
+    )
+
+
+def wrap_prompt_with_language(prompt: str) -> str:
+    """Klammert ``prompt`` mit der starken Sprach-Anweisung — vor UND nach.
+
+    LLM-Praxis: Anweisungen, die VOR dem Body stehen, werden mit hoeherer
+    Wahrscheinlichkeit befolgt; eine Erinnerung am Ende setzt die letzte
+    Aktivierung neu.
+    """
+    instr = get_strong_language_instruction()
+    return f"{instr}\n\n{prompt}\n\n{instr}"

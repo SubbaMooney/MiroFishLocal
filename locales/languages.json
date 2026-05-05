@@ -1,30 +1,37 @@
 {
   "zh": {
     "label": "中文",
-    "llmInstruction": "请使用中文回答。"
+    "llmInstruction": "请使用中文回答。",
+    "strongInstruction": "[语言要求] 必须始终使用中文（简体中文）回答。即使工具返回的数据或参考资料是其他语言，也要用中文撰写最终输出。不要混用语言。"
   },
   "en": {
     "label": "English",
-    "llmInstruction": "Please respond in English."
+    "llmInstruction": "Please respond in English.",
+    "strongInstruction": "[LANGUAGE REQUIREMENT] You MUST respond exclusively in English. Even if tool outputs, source data, or template instructions appear in another language (Chinese, Spanish, etc.), translate and write your final answer in English. Do NOT mix languages in the output."
   },
   "es": {
     "label": "Español",
-    "llmInstruction": "Por favor, responde en español."
+    "llmInstruction": "Por favor, responde en español.",
+    "strongInstruction": "[REQUISITO DE IDIOMA] Debes responder exclusivamente en español. Incluso si los datos de las herramientas o las plantillas están en otro idioma, traduce y escribe tu respuesta final en español. NO mezcles idiomas."
   },
   "fr": {
     "label": "Français",
-    "llmInstruction": "Veuillez répondre en français."
+    "llmInstruction": "Veuillez répondre en français.",
+    "strongInstruction": "[EXIGENCE LINGUISTIQUE] Vous devez répondre exclusivement en français. Même si les données des outils ou les modèles sont dans une autre langue, traduisez et rédigez votre réponse finale en français. NE mélangez PAS les langues."
   },
   "pt": {
     "label": "Português",
-    "llmInstruction": "Por favor, responda em português."
+    "llmInstruction": "Por favor, responda em português.",
+    "strongInstruction": "[REQUISITO DE IDIOMA] Você deve responder exclusivamente em português. Mesmo que os dados das ferramentas ou modelos estejam em outro idioma, traduza e escreva sua resposta final em português. NÃO misture idiomas."
   },
   "ru": {
     "label": "Русский",
-    "llmInstruction": "Пожалуйста, отвечайте на русском языке."
+    "llmInstruction": "Пожалуйста, отвечайте на русском языке.",
+    "strongInstruction": "[ТРЕБОВАНИЕ К ЯЗЫКУ] Вы должны отвечать исключительно на русском языке. Даже если данные инструментов или шаблоны на другом языке, переведите и напишите окончательный ответ на русском. НЕ смешивайте языки."
   },
   "de": {
     "label": "Deutsch",
-    "llmInstruction": "Bitte antworten Sie auf Deutsch."
+    "llmInstruction": "Bitte antworten Sie auf Deutsch.",
+    "strongInstruction": "[SPRACHANFORDERUNG] Antworten Sie ausschließlich auf Deutsch. Auch wenn Tool-Ausgaben oder Templates in einer anderen Sprache vorliegen, übersetzen und schreiben Sie Ihre finale Antwort auf Deutsch. KEINE Sprachen vermischen."
   }
 }
