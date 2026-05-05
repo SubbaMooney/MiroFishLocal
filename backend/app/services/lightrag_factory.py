@@ -104,6 +104,20 @@ def create_llm_func(
                 temperature=kwargs.get("temperature", 0.0),
             ),
         )
+        # Token-Tracker (Audit-Folge): LightRAG-Indexing macht zehntausende
+        # LLM-Calls; ohne Tracking ist die Cost-Hochrechnung blind.
+        try:
+            from ..utils.token_tracker import tracker
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                tracker.record(
+                    model=model_name,
+                    prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                    purpose="lightrag:keyword" if keyword_extraction else "lightrag:extract",
+                )
+        except Exception:  # noqa: BLE001
+            pass
         return resp.choices[0].message.content or ""
 
     return _llm
@@ -141,6 +155,20 @@ def create_embed_func(
                 model=model_name, input=texts, encoding_format="float"
             ),
         )
+        # Token-Tracker (Audit-Folge): Embedding-Calls haben prompt_tokens
+        # in resp.usage; completion_tokens=0 (Embeddings haben kein Output).
+        try:
+            from ..utils.token_tracker import tracker
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                tracker.record(
+                    model=model_name,
+                    prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=0,
+                    purpose="lightrag:embed",
+                )
+        except Exception:  # noqa: BLE001
+            pass
         vecs = np.array([d.embedding for d in resp.data], dtype=np.float32)
         if vecs.shape != (len(texts), embed_dim):
             raise RuntimeError(

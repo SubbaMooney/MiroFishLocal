@@ -41,6 +41,12 @@ const routes = [
     name: 'Interaction',
     component: InteractionView,
     props: true
+  },
+  // Catch-all: unbekannte Pfade (z.B. veraltete Bookmarks /de/login)
+  // landen auf Home statt einer leeren Seite + Vue-Router-Warning.
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/'
   }
 ]
 

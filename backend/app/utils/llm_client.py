@@ -42,17 +42,19 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        purpose: str = "llm:chat",
     ) -> str:
         """
         发送聊天请求
-        
+
         Args:
             messages: 消息列表
             temperature: 温度参数
             max_tokens: 最大token数
             response_format: 响应格式（如JSON模式）
-            
+            purpose: Tag fuer den Token-Tracker (z.B. "persona:gen", "config:agent_batch").
+
         Returns:
             模型响应文本
         """
@@ -62,11 +64,26 @@ class LLMClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        
+
         if response_format:
             kwargs["response_format"] = response_format
-        
+
         response = self.client.chat.completions.create(**kwargs)
+        # Token-Tracker (Audit-Folge): jede Response enthaelt response.usage.
+        # Defensive — manche kompatible Provider liefern usage=None.
+        try:
+            from .token_tracker import tracker
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                tracker.record(
+                    model=self.model,
+                    prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                    purpose=purpose,
+                )
+        except Exception:  # noqa: BLE001 — Tracking darf nie crashen.
+            pass
+
         content = response.choices[0].message.content
         # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
         content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
