@@ -469,17 +469,27 @@ const renderGraph = () => {
   const getColor = (type) => colorMap[type] || '#999'
 
   // Simulation - 根据边数量动态调整节点间距
+  // Performance-Tuning fuer grosse Graphen (>200 Nodes):
+  //   * alphaDecay 0.05 statt default 0.0228 -> ~3x schnellere Konvergenz
+  //   * alphaMin 0.02 statt default 0.001    -> Simulation stoppt frueher
+  //   * velocityDecay 0.5 statt default 0.4  -> weniger Momentum
+  //   * forceCollide skaliert mit Node-Count -> kleinerer Radius bei 400+
+  const isLargeGraph = nodes.length > 200
+  const collideRadius = isLargeGraph ? 25 : 50
+  const chargeStrength = isLargeGraph ? -200 : -400
   const simulation = d3.forceSimulation(nodes)
+    .alphaDecay(0.05)
+    .alphaMin(0.02)
+    .velocityDecay(0.5)
     .force('link', d3.forceLink(edges).id(d => d.id).distance(d => {
       // 根据这对节点之间的边数量动态调整距离
-      // 基础距离 150，每多一条边增加 40
-      const baseDistance = 150
+      const baseDistance = isLargeGraph ? 80 : 150
       const edgeCount = d.pairTotal || 1
-      return baseDistance + (edgeCount - 1) * 50
+      return baseDistance + (edgeCount - 1) * 40
     }))
-    .force('charge', d3.forceManyBody().strength(-400))
+    .force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(isLargeGraph ? 300 : 1000))
     .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collide', d3.forceCollide(50))
+    .force('collide', d3.forceCollide(collideRadius))
     // 添加向中心的引力，让独立的节点群聚集到中心区域
     .force('x', d3.forceX(width / 2).strength(0.04))
     .force('y', d3.forceY(height / 2).strength(0.04))
