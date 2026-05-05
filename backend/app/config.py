@@ -238,6 +238,19 @@ class Config:
         'RATE_LIMIT_SIMULATION_START', '5 per minute'
     )
 
+    # Security-Headers (Audit M5) via flask-talisman. Default: aktiv,
+    # aber dev-permissive (force_https=False, CSP erlaubt 'unsafe-inline'
+    # fuer Vue-Inline-Styles im Dev-Build). Ueber SECURITY_HEADERS_ENABLED
+    # komplett deaktivierbar fuer Tests, die rohe Header inspizieren.
+    # SECURITY_HEADERS_FORCE_HTTPS sollte in Produktion auf True gestellt
+    # werden, sobald TLS-Terminierung vorgelagert ist.
+    SECURITY_HEADERS_ENABLED = os.environ.get(
+        'SECURITY_HEADERS_ENABLED', 'True'
+    ).lower() == 'true'
+    SECURITY_HEADERS_FORCE_HTTPS = os.environ.get(
+        'SECURITY_HEADERS_FORCE_HTTPS', 'False'
+    ).lower() == 'true'
+
     @classmethod
     def env_source(cls) -> str:
         """返回 .env 加载来源的可读描述（用于诊断）"""

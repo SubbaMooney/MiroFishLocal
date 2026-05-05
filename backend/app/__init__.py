@@ -50,6 +50,41 @@ def create_app(config_class=Config):
         resources={r"/api/*": {"origins": Config.CORS_ALLOWED_ORIGINS}},
         supports_credentials=False,
     )
+
+    # M5: Security-Headers via flask-talisman. Wird NACH CORS initialisiert,
+    # damit CORS-Preflight (OPTIONS) eigene Header setzt, bevor Talisman
+    # zusaetzliche Header anhaengt.
+    # CSP ist bewusst dev-permissive ('unsafe-inline' fuer Vue-Inline-Styles,
+    # 'self' fuer Fetch). In Produktion sollte CSP auf 'self' + spezifische
+    # CDN-Hosts eingeengt werden.
+    if app.config.get('SECURITY_HEADERS_ENABLED', True):
+        from flask_talisman import Talisman
+        Talisman(
+            app,
+            force_https=app.config.get('SECURITY_HEADERS_FORCE_HTTPS', False),
+            strict_transport_security=app.config.get(
+                'SECURITY_HEADERS_FORCE_HTTPS', False
+            ),
+            content_security_policy={
+                'default-src': "'self'",
+                'script-src': ["'self'", "'unsafe-inline'"],
+                'style-src': ["'self'", "'unsafe-inline'"],
+                'img-src': ["'self'", 'data:', 'blob:'],
+                'connect-src': "'self'",
+                'font-src': ["'self'", 'data:'],
+                'object-src': "'none'",
+                'frame-ancestors': "'none'",
+            },
+            referrer_policy='strict-origin-when-cross-origin',
+            frame_options='DENY',
+            session_cookie_secure=False,  # Single-User, kein Session-Cookie aktiv.
+        )
+
+    # M9 (CSRF) — Nicht zutreffend in aktuellem Setup:
+    # Auth via X-API-Key-Header (siehe C1-Hook unten), keine Cookie-/
+    # Session-Auth, kein Browser-CSRF-Vehikel. Falls jemals Cookie- oder
+    # Session-basiertes Auth eingefuehrt wird, dieses Finding sofort
+    # wieder oeffnen und flask-wtf CSRFProtect aktivieren.
     
     # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
     from .services.simulation_runner import SimulationRunner
