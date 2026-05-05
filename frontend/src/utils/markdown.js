@@ -21,6 +21,18 @@
 
 import DOMPurify from 'dompurify'
 
+// Memoization-Cache: Sections sind nach Generation final, aber Vue ruft
+// renderMarkdown bei jedem Re-Render erneut auf (v-html cached nicht).
+// Ohne Cache laufen ~14 Regex-Passes + DOMPurify auf jedem Tick fuer
+// jede sichtbare Section — das ist die Hauptursache der "Forced Reflow"-
+// Violations bei Reports mit 5x3-4KB Sections.
+//
+// LRU-aehnlicher Cache: Map preserved Insertion-Order, bei >200 Eintraegen
+// loeschen wir den aeltesten. 200 reicht fuer Report (~5 Sections) +
+// Chat-Verlauf (~50 Messages) + Buffer.
+const _renderCache = new Map()
+const _RENDER_CACHE_MAX = 200
+
 // HTML-Escape: neutralisiert sämtliche Steuerzeichen, BEVOR die
 // Regex-Markdown-Transformation HTML-Tags injiziert.
 const escapeHtml = (input) => {
@@ -45,6 +57,12 @@ const escapeHtml = (input) => {
 //   → kein ausführbares <script> mehr im DOM.
 export const renderMarkdown = (content) => {
   if (!content) return ''
+
+  // Cache-Hit-Path: identischer Input -> identischer Output, kein
+  // Bedarf an erneuter Regex-Verarbeitung. Bei 5 Sections im Report
+  // sparen wir bei jedem Re-Render 5x ~10ms = 50ms reflow-Zeit.
+  const cached = _renderCache.get(content)
+  if (cached !== undefined) return cached
 
   // 1) Sämtliche HTML-relevanten Zeichen aus dem Quelltext escapen.
   const escaped = escapeHtml(content)
@@ -144,9 +162,17 @@ export const renderMarkdown = (content) => {
   // 14) Final-Stage: DOMPurify als Defense-in-Depth.
   //     `data-level` ist ein eigenes data-Attribut und wird von
   //     DOMPurify per Default behalten. `class` und `start` ebenfalls.
-  return DOMPurify.sanitize(html, {
+  const sanitized = DOMPurify.sanitize(html, {
     ADD_ATTR: ['class', 'data-level', 'start']
   })
+
+  // Cache-Insert mit LRU-Eviction.
+  if (_renderCache.size >= _RENDER_CACHE_MAX) {
+    const firstKey = _renderCache.keys().next().value
+    _renderCache.delete(firstKey)
+  }
+  _renderCache.set(content, sanitized)
+  return sanitized
 }
 
 // Sanitisiert beliebiges HTML, das per innerHTML in Vue-h()-Render
