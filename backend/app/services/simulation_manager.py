@@ -394,12 +394,27 @@ class SimulationManager:
             
             if progress_callback:
                 progress_callback(
-                    "generating_config", 30,
+                    "generating_config", 5,
                     t('progress.callingLLMConfig'),
-                    current=1,
-                    total=3
+                    current=0,
+                    total=0
                 )
-            
+
+            # Sub-Progress: generate_config laeuft in (3 + N batches) Schritten —
+            # wir mappen step/total_steps in die "generating_config"-Phase
+            # zwischen 5% und 65%, damit das Frontend pro Batch eine Bewegung
+            # sieht statt fuer ~10 Minuten bei 70% einzufrieren.
+            def _config_sub_progress(step: int, total_steps: int, msg: str):
+                if not progress_callback or total_steps <= 0:
+                    return
+                # 5%..65% Range fuer den inneren Loop, 65%..70% bleibt fuer
+                # den letzten Wrap-Up (Speichern), siehe naechster Block.
+                pct = 5 + int((step / total_steps) * 60)
+                progress_callback(
+                    "generating_config", pct, msg,
+                    current=step, total=total_steps
+                )
+
             sim_params = config_generator.generate_config(
                 simulation_id=simulation_id,
                 project_id=state.project_id,
@@ -408,9 +423,10 @@ class SimulationManager:
                 document_text=document_text,
                 entities=filtered.entities,
                 enable_twitter=state.enable_twitter,
-                enable_reddit=state.enable_reddit
+                enable_reddit=state.enable_reddit,
+                progress_callback=_config_sub_progress,
             )
-            
+
             if progress_callback:
                 progress_callback(
                     "generating_config", 70,
