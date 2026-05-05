@@ -304,7 +304,7 @@ onMounted(async () => {
 
 <style scoped>
 .main-view {
-  height: 100vh;
+  height: calc(100vh - var(--agpl-footer-h));
   display: flex;
   flex-direction: column;
   background: #FFF;

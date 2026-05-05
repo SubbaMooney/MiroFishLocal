@@ -1197,7 +1197,7 @@ onUnmounted(() => {
 /* 主内容区 */
 .main-content {
   display: flex;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 56px - var(--agpl-footer-h));
   position: relative;
 }
 

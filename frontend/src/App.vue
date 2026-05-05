@@ -18,6 +18,19 @@ import AgplFooter from './components/AgplFooter.vue'
   box-sizing: border-box;
 }
 
+/* AGPL-Footer ist position:fixed -- globale Hoehe als CSS-Variable
+   damit alle Layout-Berechnungen (View-Hoehen + Footer selbst) aus
+   einer Quelle leben. Views mit height:100vh muessen
+   calc(100vh - var(--agpl-footer-h)) verwenden; scrollende Views
+   mit min-height:100vh greifen auf body padding-bottom zurueck. */
+:root {
+  --agpl-footer-h: 32px;
+}
+
+body {
+  padding-bottom: var(--agpl-footer-h);
+}
+
 #app {
   font-family: 'JetBrains Mono', 'Space Grotesk', 'Noto Sans SC', monospace;
   -webkit-font-smoothing: antialiased;

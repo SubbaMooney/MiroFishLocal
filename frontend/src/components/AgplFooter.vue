@@ -30,13 +30,19 @@ const sourceUrl =
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 0.4rem 1rem;
+  /* Hoehe muss zu --agpl-footer-h in App.vue passen, damit body
+     genug Platz reserviert. Aktuell 32px = 0.4rem padding * 2 +
+     ~1rem line-height der 0.7rem Schrift. */
+  height: var(--agpl-footer-h, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 1rem;
   background: rgba(255, 255, 255, 0.92);
   border-top: 1px solid #e5e5e5;
   font-family: inherit;
   font-size: 0.7rem;
   color: #555555;
-  text-align: right;
   z-index: 50;
   pointer-events: auto;
   backdrop-filter: blur(2px);
