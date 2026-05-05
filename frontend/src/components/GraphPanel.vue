@@ -657,6 +657,16 @@ const renderGraph = () => {
   linkLabelsRef = linkLabels
   linkLabelBgRef = linkLabelBg
 
+  // Performance: getBBox() pro Edge im Tick erzwingt synchronen Reflow.
+  // Da Label-Text nach enter() statisch ist, einmalig messen und auf dem
+  // Datum cachen. Reads werden hier am Stueck gemacht, ohne Writes
+  // dazwischen, damit der Browser die Layout-Berechnung batchen kann.
+  linkLabels.each(function(d) {
+    const bbox = this.getBBox()
+    d.__labelW = bbox.width
+    d.__labelH = bbox.height
+  })
+
   // Nodes group
   const nodeGroup = g.append('g').attr('class', 'nodes')
   
@@ -761,16 +771,16 @@ const renderGraph = () => {
         .attr('transform', '') // 移除旋转，保持水平
     })
     
-    // 更新边标签背景
-    linkLabelBg.each(function(d, i) {
+    // 更新边标签背景— gecachte BBox aus enter() lesen, keine Reflows
+    linkLabelBg.each(function(d) {
       const mid = getLinkMidpoint(d)
-      const textEl = linkLabels.nodes()[i]
-      const bbox = textEl.getBBox()
+      const w = d.__labelW
+      const h = d.__labelH
       d3.select(this)
-        .attr('x', mid.x - bbox.width / 2 - 4)
-        .attr('y', mid.y - bbox.height / 2 - 2)
-        .attr('width', bbox.width + 8)
-        .attr('height', bbox.height + 4)
+        .attr('x', mid.x - w / 2 - 4)
+        .attr('y', mid.y - h / 2 - 2)
+        .attr('width', w + 8)
+        .attr('height', h + 4)
         .attr('transform', '') // 移除旋转
     })
 
