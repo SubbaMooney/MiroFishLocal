@@ -174,6 +174,43 @@ def main() -> int:
     if meta_path.exists():
         translated_any |= process_meta(client, meta_path)
 
+    # Frontend (Step4Report.vue) liest die Section-Inhalte aus
+    # agent_log.jsonl section_complete/section_content events — das ist
+    # eine VIERTE Persistenz-Stelle. Wir uebernehmen die uebersetzten
+    # section_*.md hierher.
+    jsonl_path = reports_root / "agent_log.jsonl"
+    if jsonl_path.exists() and section_files:
+        translations = {}
+        for sf in section_files:
+            try:
+                idx = int(sf.stem.split("_")[1])
+            except (ValueError, IndexError):
+                continue
+            translations[idx] = sf.read_text(encoding="utf-8")
+        out_lines = []
+        patched = 0
+        for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                out_lines.append(line)
+                continue
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                out_lines.append(line)
+                continue
+            if d.get("action") in ("section_complete", "section_content"):
+                idx = d.get("section_index")
+                if idx in translations:
+                    d.setdefault("details", {})["content"] = translations[idx]
+                    patched += 1
+            out_lines.append(json.dumps(d, ensure_ascii=False))
+        if patched:
+            jsonl_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+            print(f"  > agent_log.jsonl: {patched} section-events gepatcht.")
+            translated_any = True
+        else:
+            print("  - agent_log.jsonl: keine section-events zum Patchen.")
+
     print("Fertig." if translated_any else "Keine Aenderung noetig.")
     return 0
 
