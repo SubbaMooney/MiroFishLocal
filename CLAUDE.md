@@ -43,13 +43,12 @@ Frontend hat keinen Test-Runner konfiguriert. `npm run preview` dient nur zur lo
 | Variable | Pflicht | Zweck |
 |---|---|---|
 | `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_NAME` | ja | Haupt-LLM, beliebiger OpenAI-SDK-kompatibler Endpoint (provider-agnostisch) |
-| `ZEP_API_KEY` | ja | Zep Cloud Memory Graph |
 | `LLM_BOOST_*` | optional | "Boost"-LLM für Speed-kritische Calls — **wenn ungenutzt, Variablen ganz entfernen, nicht leer lassen** |
 | `FLASK_HOST` / `FLASK_PORT` / `FLASK_DEBUG` | optional | Server-Binding (Default `0.0.0.0:5001`, Debug an) |
 | `OASIS_DEFAULT_MAX_ROUNDS` | optional | Default-Rundenzahl pro Simulation (Default 10) |
 | `REPORT_AGENT_MAX_TOOL_CALLS` / `REPORT_AGENT_MAX_REFLECTION_ROUNDS` / `REPORT_AGENT_TEMPERATURE` | optional | Tuning des Report-Agents |
 
-`Config.validate()` erzwingt `LLM_API_KEY` und `ZEP_API_KEY` beim Start; Fehlen führt zu `sys.exit(1)`.
+`Config.validate()` erzwingt `LLM_API_KEY`, `SECRET_KEY` und `MIROFISH_API_KEY` beim Start; Fehlen führt zu `sys.exit(1)`. (Zep wurde 2026-05-03 vollständig durch LightRAG abgelöst.)
 
 ## Architecture (Big Picture)
 
@@ -74,7 +73,7 @@ Seed (PDF/MD/TXT) ──► [1 Graph Build] ──► [2 Env Setup] ──► [3
   - `oasis_profile_generator.py`, `simulation_config_generator.py` — Stufe 2 (Persona & Konfig).
   - `simulation_runner.py`, `simulation_manager.py`, `simulation_ipc.py` — Stufe 3 (Subprozess-Lifecycle, IPC zwischen Flask und den `scripts/run_*_simulation.py` Workern).
   - `report_agent.py` — Stufe 4 (LLM-Agent mit Tool-Calls).
-  - `zep_*` — alle Zep-Cloud-Interaktionen (Memory Graph Reads/Writes, Paging, Tool-Bindings).
+  - `rag_manager.py`, `lightrag_factory.py`, `entity_reader.py`, `lightrag_tools.py`, `graph_memory_updater.py` — LightRAG-basierter GraphRAG-Layer (lokal, OpenAI-SDK-kompatibler Provider, Phase-1-5 Migration komplett seit 2026-05-03).
 - **Utils** (`app/utils/`): `llm_client.py` (OpenAI-SDK-Wrapper), `file_parser.py` (PDF/Text-Extraktion mit Encoding-Detection), `logger.py`, `retry.py`, `locale.py`.
 - **Models** (`app/models/`): Daten-Klassen für `project` und `task`.
 - **Scripts** (`backend/scripts/`): **Werden als eigene Prozesse vom Backend gestartet**, nicht direkt manuell aufrufen. `run_parallel_simulation.py` (62k LOC) orchestriert Twitter+Reddit; `run_twitter_simulation.py` und `run_reddit_simulation.py` sind die plattform-spezifischen Worker. `action_logger.py` schreibt Telemetrie pro Runde.

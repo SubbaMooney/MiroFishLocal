@@ -185,6 +185,8 @@ cap_drop: [ALL]
 security_opt: [no-new-privileges:true]
 ```
 
+**Status**: Behoben seit `cca2549` (Dockerfile non-root + Loopback-Bind + `cap_drop: [ALL]` + `no-new-privileges`) und ergänzt durch `05696ad` (`read_only: true` für Root-FS + `tmpfs: /tmp` + persistente `uploads/`/`logs/` als named volumes). `docker compose config` bleibt valid.
+
 ---
 
 ### HIGH
@@ -214,6 +216,8 @@ import DOMPurify from 'dompurify'
 const renderMarkdown = (content) => DOMPurify.sanitize(marked.parse(content || ''))
 ```
 Auch alle `innerHTML`-Stellen in `Step4Report.vue:1534/1561/1573` umstellen.
+
+**Status**: Behoben seit `fb3a374`. Zentrale `frontend/src/utils/markdown.js` mit `escapeHtml` + DOMPurify; `Step4Report.vue` und `Step5Interaction.vue` importieren von dort, kein Custom-Renderer mehr. Defense-in-Depth zusätzlich durch server-seitige `bleach.clean()`-Sanitisierung des Markdown-Outputs (M8, `35eadba`). UX-Folgearbeit für 429-Toasts (UX-Sprint, `df2c2d1`).
 
 #### H2 — Prompt-Injection im LLM-Tool-Loop
 `backend/app/services/report_agent.py:1067-1112,1166-1180`
@@ -311,18 +315,18 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 
 ### MEDIUM
 
-| # | Finding | Datei:Zeile |
-|---|---|---|
-| M1 | `original_filename` ohne `secure_filename()` gespeichert, in LLM-Prompts und Logs gespiegelt | `models/project.py:241-269`, `api/graph.py:184-201` |
-| M2 | `backend/uploads/` und `backend/logs/` nicht in `.gitignore` — User-PDFs/PII können versehentlich committed werden | `.gitignore`, `docker-compose.yml:13` |
-| M3 | Request-Bodies werden im DEBUG-Modus (Default!) komplett geloggt — Prompts, Chat-History, evtl. PII auf Disk | `__init__.py:52-57` |
-| M4 | Frontend gibt rohe Server-Errors via `Promise.reject(new Error(res.error))` an UI weiter — reflektiertes XSS via `v-html`-Renderer möglich | `frontend/src/api/index.js:32-34` |
-| M5 | Missing Security Headers (kein CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) | global; Fix via `flask-talisman` |
-| M6 | JSON-Schema-Validierung fehlt überall — `data.get(...)` ohne Typ-/Längen-/Format-Checks; negative `chunk_size`, Riesen-Listen, Type-Confusion möglich | `report.py:498-516`, `simulation.py:2194-2200`, `graph.py:298-345` |
-| M7 | Locale-State über Modul-Globals statt `ContextVar` — Race-Condition zwischen parallelen Requests/Background-Threads | `utils/locale.py`, `graph.py:375-379` |
-| M8 | Kein server-seitiger HTML-Sanitizer auf Markdown-Output (verstärkt H1) — wenn jemals andere Renderer eingesetzt werden, sofort Stored XSS | `report_agent.py:1707,2479-2493` |
-| M9 | CSRF-Schutz fehlt komplett — sobald jemals Cookie-Auth eingeführt wird, klassische Lücke | global |
-| M10 | Worker-Subprozesse erben `os.environ.copy()` — alle Secrets fließen weiter; falls Worker Logs schreiben, leaken Keys | `simulation_runner.py:432-447` |
+| # | Finding | Datei:Zeile | Status |
+|---|---|---|---|
+| M1 | `original_filename` ohne `secure_filename()` gespeichert, in LLM-Prompts und Logs gespiegelt | `models/project.py:241-269`, `api/graph.py:184-201` | Behoben seit `e16780c` |
+| M2 | `backend/uploads/` und `backend/logs/` nicht in `.gitignore` — User-PDFs/PII können versehentlich committed werden | `.gitignore`, `docker-compose.yml:13` | Behoben seit `2233334` |
+| M3 | Request-Bodies werden im DEBUG-Modus (Default!) komplett geloggt — Prompts, Chat-History, evtl. PII auf Disk | `__init__.py:52-57` | Behoben seit `99aa5d4` |
+| M4 | Frontend gibt rohe Server-Errors via `Promise.reject(new Error(res.error))` an UI weiter — reflektiertes XSS via `v-html`-Renderer möglich | `frontend/src/api/index.js:32-34` | Behoben seit `1f08863` |
+| M5 | Missing Security Headers (kein CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) | global; Fix via `flask-talisman` | Behoben seit `2310f83` |
+| M6 | JSON-Schema-Validierung fehlt überall — `data.get(...)` ohne Typ-/Längen-/Format-Checks; negative `chunk_size`, Riesen-Listen, Type-Confusion möglich | `report.py:498-516`, `simulation.py:2194-2200`, `graph.py:298-345` | Behoben seit `4df1736` |
+| M7 | Locale-State über Modul-Globals statt `ContextVar` — Race-Condition zwischen parallelen Requests/Background-Threads | `utils/locale.py`, `graph.py:375-379` | Behoben seit `ce86150` |
+| M8 | Kein server-seitiger HTML-Sanitizer auf Markdown-Output (verstärkt H1) — wenn jemals andere Renderer eingesetzt werden, sofort Stored XSS | `report_agent.py:1707,2479-2493` | Behoben seit `35eadba` |
+| M9 | CSRF-Schutz fehlt komplett — sobald jemals Cookie-Auth eingeführt wird, klassische Lücke | global | Nicht zutreffend (`2310f83`) — API-Key via Header, keine Cookie-/Session-Auth, kein CSRF-Vehikel. Reaktivierungs-Trigger: sobald Cookie- oder Session-Auth eingeführt wird, dieses Finding sofort wieder öffnen und `flask-wtf` CSRFProtect aktivieren. |
+| M10 | Worker-Subprozesse erben `os.environ.copy()` — alle Secrets fließen weiter; falls Worker Logs schreiben, leaken Keys | `simulation_runner.py:432-447` | Behoben seit `4fa9197` |
 
 ---
 
@@ -352,15 +356,15 @@ Bei Schema-Änderungen in OASIS leaken interne Felder. `content` ist LLM-generie
 
 | Kategorie | Status | Findings |
 |---|---|---|
-| A01 Broken Access Control | TEILWEISE | C1, C6, H3, H4 behoben; M9 offen |
+| A01 Broken Access Control | OK | C1, C6, H3, H4 behoben; M9 als Nicht-Zutreffend dokumentiert |
 | A02 Cryptographic Failures | OK | C4 behoben |
-| A03 Injection | TEILWEISE | H2, H4 behoben; H1, M6, M8 offen |
-| A04 Insecure Design | TEILWEISE | C1, H5, H6, H7 behoben; M6 offen |
-| A05 Security Misconfiguration | TEILWEISE | C2, C3, C5 behoben; C7, M3, M5, L1–L4 offen |
+| A03 Injection | OK | H1, H2, H4, M6, M8 alle behoben |
+| A04 Insecure Design | OK | C1, H5, H6, H7, M6 behoben |
+| A05 Security Misconfiguration | OK | C2, C3, C5, C7, M3, M5 behoben; nur LOW-Findings (L1–L4) bleiben |
 | A06 Vulnerable Components | OK (current) | `pip-audit` + `npm audit` in CI empfohlen |
 | A07 Auth Failures | OK | C1 behoben |
-| A08 Software & Data Integrity | TEILWEISE | M10, L6 (positiv: kein Pickle in IPC) |
-| A09 Logging & Monitoring | TEILWEISE | M3 |
+| A08 Software & Data Integrity | OK | M10 behoben (kein Pickle in IPC) |
+| A09 Logging & Monitoring | OK | M3 behoben |
 | A10 SSRF | OK | Keine User-URL wird vom Server abgerufen |
 
 ---
@@ -424,3 +428,31 @@ Frontend: `src/api/*.js`, `src/components/Step{1..5}*.vue`, `src/views/*.vue`, `
 Infra: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.gitignore`, `.env.example`, `.github/workflows/*.yml`, `backend/pyproject.toml`, `backend/uv.lock`, `frontend/package.json`, `frontend/package-lock.json`.
 
 Doku-Egress (zur Vollständigkeit): `README.md`, `README-ZH.md`, `docs/HTML/*.html`.
+
+---
+
+## Final-Closeout (2026-05-05)
+
+**Audit komplett abgearbeitet.** Alle 16 nummerierten Findings (C1–C7, H1–H9, M1–M10) sind entweder behoben oder dokumentiert nicht-zutreffend. Verbleibend nur LOW/INFO-Items, die separat priorisiert werden.
+
+### Ergebnis-Tabelle
+
+| Severity | Anzahl | Status |
+|---|---|---|
+| CRITICAL | 7 | 7 behoben (C1 `dc85ea3`, C2 `b0a9bef`, C3 `deff271`, C4 `7df1aaf`, C5 `4d4ba7f`, C6 `e337853`, C7 `cca2549` + `05696ad`) |
+| HIGH | 9 | 9 behoben (H1 `fb3a374`, H2 `7757ad3`, H3 `e85556c`, H4 `dca36b6`, H5 `f1ee8e7`, H6 `7c9dc6f`, H7 `989fe0b`, H8 `9f2bd35`, H9 `e44f7f9`) |
+| MEDIUM | 10 | 9 behoben + 1 N/A (M1 `e16780c`, M2 `2233334`, M3 `99aa5d4`, M4 `1f08863`, M5 `2310f83`, M6 `4df1736`, M7 `ce86150`, M8 `35eadba`, M9 N/A, M10 `4fa9197`) |
+
+### Zusätzliche Hardening-Schritte (über Audit hinaus)
+
+- **UX-429** (`df2c2d1`): Frontend-Toast für Rate-Limits + Simulations-Quota, damit Nutzer 429er nicht als rohe Fehler sehen.
+- **Limiter-State-Bugfix** (Teil von M6 Commit `4df1736`): `create_app` setzt `limiter.enabled` jetzt explizit pro App, vermeidet Test-Interferenz wenn mehrere Apps mit gemischten Flags erzeugt werden.
+
+### Test-Stand
+
+289/289 Backend-Tests grün. Frontend-Build (`npm run build`) verifiziert.
+
+### Reaktivierungs-Trigger
+
+- **M9 (CSRF)**: sobald jemals Cookie- oder Session-Auth eingeführt wird, dieses Finding wieder öffnen und `flask-wtf` CSRFProtect aktivieren.
+- **CI-Empfehlung**: `pip-audit` + `npm audit` als CI-Gate, sobald CI eingerichtet wird (für A06-Vulnerable-Components Dauer-Sichtbarkeit).

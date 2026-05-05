@@ -461,18 +461,18 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <h3><span class="badge badge-med">MEDIUM</span></h3>
 
 <table>
-  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th></tr></thead>
+  <thead><tr><th>#</th><th>Finding</th><th>Datei:Zeile</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td>M1</td><td><code>original_filename</code> ohne <code>secure_filename()</code> gespeichert</td><td><code>models/project.py:241-269</code></td></tr>
-    <tr><td>M2</td><td><code>backend/uploads/</code> + <code>backend/logs/</code> nicht in <code>.gitignore</code></td><td><code>.gitignore</code></td></tr>
-    <tr><td>M3</td><td>Request-Bodies werden im DEBUG-Modus komplett geloggt — PII auf Disk</td><td><code>__init__.py:52-57</code></td></tr>
-    <tr><td>M4</td><td>Frontend leitet rohe Server-Errors via <code>Promise.reject(new Error(res.error))</code> in UI weiter</td><td><code>frontend/src/api/index.js:32-34</code></td></tr>
-    <tr><td>M5</td><td>Missing Security Headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)</td><td>global; <code>flask-talisman</code></td></tr>
-    <tr><td>M6</td><td>JSON-Schema-Validierung fehlt überall</td><td><code>report.py:498-516</code>, <code>simulation.py:2194-2200</code></td></tr>
-    <tr><td>M7</td><td>Locale-State über Modul-Globals statt <code>ContextVar</code></td><td><code>utils/locale.py</code></td></tr>
-    <tr><td>M8</td><td>Kein server-seitiger HTML-Sanitizer auf Markdown-Output</td><td><code>report_agent.py:1707,2479-2493</code></td></tr>
-    <tr><td>M9</td><td>CSRF-Schutz fehlt komplett</td><td>global</td></tr>
-    <tr><td>M10</td><td>Worker-Subprozesse erben <code>os.environ.copy()</code> — alle Secrets fließen weiter</td><td><code>simulation_runner.py:432-447</code></td></tr>
+    <tr><td>M1</td><td><code>original_filename</code> ohne <code>secure_filename()</code> gespeichert</td><td><code>models/project.py:241-269</code></td><td>Behoben seit <code>e16780c</code></td></tr>
+    <tr><td>M2</td><td><code>backend/uploads/</code> + <code>backend/logs/</code> nicht in <code>.gitignore</code></td><td><code>.gitignore</code></td><td>Behoben seit <code>2233334</code></td></tr>
+    <tr><td>M3</td><td>Request-Bodies werden im DEBUG-Modus komplett geloggt — PII auf Disk</td><td><code>__init__.py:52-57</code></td><td>Behoben seit <code>99aa5d4</code></td></tr>
+    <tr><td>M4</td><td>Frontend leitet rohe Server-Errors via <code>Promise.reject(new Error(res.error))</code> in UI weiter</td><td><code>frontend/src/api/index.js:32-34</code></td><td>Behoben seit <code>1f08863</code></td></tr>
+    <tr><td>M5</td><td>Missing Security Headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)</td><td>global; <code>flask-talisman</code></td><td>Behoben seit <code>2310f83</code></td></tr>
+    <tr><td>M6</td><td>JSON-Schema-Validierung fehlt überall</td><td><code>report.py:498-516</code>, <code>simulation.py:2194-2200</code></td><td>Behoben seit <code>4df1736</code></td></tr>
+    <tr><td>M7</td><td>Locale-State über Modul-Globals statt <code>ContextVar</code></td><td><code>utils/locale.py</code></td><td>Behoben seit <code>ce86150</code></td></tr>
+    <tr><td>M8</td><td>Kein server-seitiger HTML-Sanitizer auf Markdown-Output</td><td><code>report_agent.py:1707,2479-2493</code></td><td>Behoben seit <code>35eadba</code></td></tr>
+    <tr><td>M9</td><td>CSRF-Schutz fehlt komplett</td><td>global</td><td>Nicht zutreffend (<code>2310f83</code>) — API-Key via Header, kein Cookie/Session, kein CSRF-Vehikel. Reaktivierung sobald Cookie-Auth eingeführt wird.</td></tr>
+    <tr><td>M10</td><td>Worker-Subprozesse erben <code>os.environ.copy()</code> — alle Secrets fließen weiter</td><td><code>simulation_runner.py:432-447</code></td><td>Behoben seit <code>4fa9197</code></td></tr>
   </tbody>
 </table>
 
@@ -502,15 +502,15 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 <table>
   <thead><tr><th>Kategorie</th><th>Status</th><th>Findings</th></tr></thead>
   <tbody>
-    <tr><td>A01 Broken Access Control</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C1, C6, H3, H4 behoben; M9 offen</td></tr>
+    <tr><td>A01 Broken Access Control</td><td><span class="badge badge-low">OK</span></td><td>C1, C6, H3, H4 behoben; M9 als Nicht-Zutreffend dokumentiert</td></tr>
     <tr><td>A02 Cryptographic Failures</td><td><span class="badge badge-low">OK</span></td><td>C4 behoben</td></tr>
-    <tr><td>A03 Injection</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>H2, H4 behoben; H1, M6, M8 offen</td></tr>
-    <tr><td>A04 Insecure Design</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C1, H5, H6, H7 behoben; M6 offen</td></tr>
-    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-warn">TEILWEISE</span></td><td>C2, C3, C5 behoben; C7, M3, M5, L1–L4 offen</td></tr>
+    <tr><td>A03 Injection</td><td><span class="badge badge-low">OK</span></td><td>H1, H2, H4, M6, M8 alle behoben</td></tr>
+    <tr><td>A04 Insecure Design</td><td><span class="badge badge-low">OK</span></td><td>C1, H5, H6, H7, M6 behoben</td></tr>
+    <tr><td>A05 Security Misconfiguration</td><td><span class="badge badge-low">OK</span></td><td>C2, C3, C5, C7, M3, M5 behoben; nur LOW (L1–L4) bleibt</td></tr>
     <tr><td>A06 Vulnerable Components</td><td><span class="badge badge-low">OK</span></td><td><code>pip-audit</code> + <code>npm audit</code> in CI empfohlen</td></tr>
     <tr><td>A07 Auth Failures</td><td><span class="badge badge-low">OK</span></td><td>C1 behoben</td></tr>
-    <tr><td>A08 Software &amp; Data Integrity</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M10, L6</td></tr>
-    <tr><td>A09 Logging &amp; Monitoring</td><td><span class="badge badge-med">TEILWEISE</span></td><td>M3</td></tr>
+    <tr><td>A08 Software &amp; Data Integrity</td><td><span class="badge badge-low">OK</span></td><td>M10 behoben (kein Pickle in IPC)</td></tr>
+    <tr><td>A09 Logging &amp; Monitoring</td><td><span class="badge badge-low">OK</span></td><td>M3 behoben</td></tr>
     <tr><td>A10 SSRF</td><td><span class="badge badge-low">OK</span></td><td>Keine User-URL wird vom Server abgerufen</td></tr>
   </tbody>
 </table>
@@ -519,17 +519,30 @@ const renderMarkdown = (content) =&gt; DOMPurify.sanitize(marked.parse(content |
 
 <ol>
   <li><strong>C2</strong> — <code>FLASK_DEBUG</code> Default auf <code>False</code>. Eine Zeile, eliminiert RCE-Risiko sofort. <em>(Behoben)</em></li>
-  <li><strong>C7</strong> — Docker non-root + Loopback-Bind. Verteidigung in Tiefe.</li>
+  <li><strong>C7</strong> — Docker non-root + Loopback-Bind. <em>(Behoben — <code>cca2549</code> + <code>05696ad</code>)</em></li>
   <li><strong>C6</strong> — Path-Traversal-Validator zentral + an allen ID-basierten Routen anwenden. <em>(Behoben — <code>e337853</code>)</em></li>
   <li><strong>C3</strong> — CORS auf Whitelist beschränken. <em>(Behoben — <code>deff271</code>)</em></li>
-  <li><strong>H1</strong> — <code>marked</code> + <code>DOMPurify</code> im Frontend, alle <code>v-html</code>/<code>innerHTML</code>-Stellen umstellen.</li>
+  <li><strong>H1</strong> — <code>marked</code> + <code>DOMPurify</code> im Frontend. <em>(Behoben — <code>fb3a374</code>; server-side Defense-in-Depth via <code>bleach</code> in M8 <code>35eadba</code>)</em></li>
   <li><strong>C5</strong> — Globaler <code>errorhandler</code>, alle <code>traceback.format_exc()</code> aus Responses entfernen. <em>(Behoben)</em></li>
   <li><strong>C1</strong> — Auth-Layer (mind. API-Key-Header in <code>before_request</code>). <em>(Behoben — <code>dc85ea3</code>)</em></li>
   <li><strong>C4</strong> — <code>SECRET_KEY</code>-Default entfernen, Pflicht in <code>validate()</code>. <em>(Behoben)</em></li>
   <li><strong>H6</strong> — <code>flask-limiter</code> für <code>/generate</code>, <code>/build</code>, <code>/start</code>, <code>/chat</code>. <em>(Behoben — <code>7c9dc6f</code>)</em></li>
   <li><strong>H2 + H4</strong> — Tool-Call-Allow-List + <code>chat_history</code> server-seitig. <em>(H4 behoben — <code>dca36b6</code>; H2 behoben — <code>7757ad3</code>)</em></li>
 </ol>
-<p><strong>Stand 2026-05-04 (nach Sprint H2/H5/H6/H7/H8/H9)</strong>: 0 von 9 HIGH offen — H2/H5/H6/H7/H8/H9 in diesem Sprint behoben, H3/H4 in vorherigen Sprints. CRITICAL: 6 von 7 behoben (C1, C2, C3, C4, C5, C6); offen verbleibt nur C7 (Docker non-root + Loopback-Bind). H1 (Stored XSS via Custom-Markdown-Renderer im Frontend) und die LOW/INFO- sowie MEDIUM-Findings sind nicht Teil dieses Sprints.</p>
+<p><strong>Stand 2026-05-05 (Final-Closeout)</strong>: Audit komplett abgearbeitet. 7/7 CRITICAL, 9/9 HIGH, 9/10 MEDIUM behoben; M9 (CSRF) ist im aktuellen API-Key-Header-Setup nicht zutreffend und mit Reaktivierungs-Trigger dokumentiert. Verbleibend nur LOW/INFO-Items, die separat priorisiert werden. Backend-Tests: 289/289. Frontend-Build verifiziert.</p>
+
+<h3>Final-Closeout (2026-05-05)</h3>
+
+<table>
+  <thead><tr><th>Severity</th><th>Anzahl</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>CRITICAL</td><td>7</td><td>7 behoben (C1 <code>dc85ea3</code>, C2 <code>b0a9bef</code>, C3 <code>deff271</code>, C4 <code>7df1aaf</code>, C5 <code>4d4ba7f</code>, C6 <code>e337853</code>, C7 <code>cca2549</code> + <code>05696ad</code>)</td></tr>
+    <tr><td>HIGH</td><td>9</td><td>9 behoben (H1 <code>fb3a374</code>, H2 <code>7757ad3</code>, H3 <code>e85556c</code>, H4 <code>dca36b6</code>, H5 <code>f1ee8e7</code>, H6 <code>7c9dc6f</code>, H7 <code>989fe0b</code>, H8 <code>9f2bd35</code>, H9 <code>e44f7f9</code>)</td></tr>
+    <tr><td>MEDIUM</td><td>10</td><td>9 behoben + 1 N/A (M1 <code>e16780c</code>, M2 <code>2233334</code>, M3 <code>99aa5d4</code>, M4 <code>1f08863</code>, M5 <code>2310f83</code>, M6 <code>4df1736</code>, M7 <code>ce86150</code>, M8 <code>35eadba</code>, M9 N/A, M10 <code>4fa9197</code>)</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Zusatz:</strong> UX-429 Frontend-Toast (<code>df2c2d1</code>) als Folgearbeit zu H6, plus Limiter-State-Bugfix in <code>4df1736</code> der Test-Interferenz bei gemischten <code>RATE_LIMIT_ENABLED</code>-Flags verhindert.</p>
 
 <table>
   <thead><tr><th>Finding</th><th>Feature-Commit</th><th>Merge-Commit</th><th>Tests neu</th></tr></thead>
