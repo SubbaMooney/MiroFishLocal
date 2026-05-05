@@ -71,7 +71,15 @@ def process_section_file(client: LLMClient, path: Path) -> bool:
 
 
 def process_meta(client: LLMClient, path: Path) -> bool:
-    """Outline-Section-Contents in meta.json uebersetzen."""
+    """Outline-Section-Contents + markdown_content in meta.json uebersetzen.
+
+    meta.json haelt zwei Inhaltsquellen:
+      1. outline.sections[].content + outline.summary
+      2. markdown_content (kompletter zusammengesetzter Markdown-Body, vom
+         Frontend ueber GET /api/report/<id> gelesen)
+    Beide Quellen muessen synchronisiert werden, sonst sieht der User
+    nach der section_*.md-Uebersetzung trotzdem chinesische Inhalte.
+    """
     meta = json.loads(path.read_text(encoding="utf-8"))
     outline = meta.get("outline") or {}
     sections = outline.get("sections") or []
@@ -87,6 +95,26 @@ def process_meta(client: LLMClient, path: Path) -> bool:
         print("  > meta.outline.summary: uebersetze...")
         outline["summary"] = translate_to_english(client, summary)
         changed = True
+    md = meta.get("markdown_content") or ""
+    if looks_chinese(md):
+        # Strategie: full_report.md ist nach process_section_file bereits
+        # neu zusammengesetzt aus den uebersetzten section_*.md, also als
+        # Truth-Source verwenden statt erneut LLM-uebersetzen.
+        full_path = path.parent / "full_report.md"
+        if full_path.exists():
+            new_md = full_path.read_text(encoding="utf-8")
+            if not looks_chinese(new_md):
+                print("  > meta.markdown_content: aus full_report.md uebernommen.")
+                meta["markdown_content"] = new_md
+                changed = True
+            else:
+                print("  > meta.markdown_content: uebersetze direkt...")
+                meta["markdown_content"] = translate_to_english(client, md)
+                changed = True
+        else:
+            print("  > meta.markdown_content: uebersetze direkt...")
+            meta["markdown_content"] = translate_to_english(client, md)
+            changed = True
     if changed:
         path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         print("    meta.json geschrieben.")
@@ -116,26 +144,35 @@ def main() -> int:
         translated_any |= process_section_file(client, sf)
 
     meta_path = reports_root / "meta.json"
-    if meta_path.exists():
-        translated_any |= process_meta(client, meta_path)
-
     full_report = reports_root / "full_report.md"
+
+    # Wichtig: full_report.md ZUERST neu zusammensetzen, damit
+    # process_meta die uebersetzte Truth-Source als markdown_content
+    # uebernehmen kann (statt erneut LLM zu zahlen).
     if section_files and translated_any:
-        # full_report neu zusammensetzen aus dem Outline-Titel + Sections.
-        meta = (
+        meta_pre = (
             json.loads(meta_path.read_text(encoding="utf-8"))
             if meta_path.exists()
             else {}
         )
-        outline = meta.get("outline") or {}
-        title = outline.get("title", "Report")
-        summary = outline.get("summary", "")
+        outline_pre = meta_pre.get("outline") or {}
+        title = outline_pre.get("title", "Report")
+        summary = outline_pre.get("summary", "")
+        # summary kann noch chinesisch sein — egal, process_meta uebersetzt
+        # outline.summary und schreibt meta.json danach. full_report bekommt
+        # einen englischen Header durch das Voruebersetzen unten falls noetig.
+        if looks_chinese(summary):
+            summary = translate_to_english(client, summary)
+            print("  > full_report.md: summary fuer header uebersetzt.")
         parts = [f"# {title}", "", summary, ""]
         for sf in section_files:
             parts.append(sf.read_text(encoding="utf-8"))
             parts.append("")
         full_report.write_text("\n".join(parts), encoding="utf-8")
         print(f"  > full_report.md neu geschrieben ({full_report.stat().st_size} bytes)")
+
+    if meta_path.exists():
+        translated_any |= process_meta(client, meta_path)
 
     print("Fertig." if translated_any else "Keine Aenderung noetig.")
     return 0
