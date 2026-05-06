@@ -459,7 +459,34 @@ def prepare_simulation():
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
         parallel_profile_count = data.get('parallel_profile_count', 5)
-        
+
+        # Idempotenz-Gate: Wenn bereits ein Prepare-Task fuer diese simulation_id
+        # laeuft, dessen task_id zurueckgeben statt neuen Thread zu spawnen.
+        # Verhindert paralleles Mehrfach-Triggern (Frontend-Reload, Retry, etc.).
+        task_manager = TaskManager()
+        if not force_regenerate:
+            existing_task = task_manager.find_active_task(
+                task_type="simulation_prepare",
+                metadata_match={"simulation_id": simulation_id}
+            )
+            if existing_task:
+                logger.info(
+                    f"Prepare laeuft bereits fuer {simulation_id}, "
+                    f"returniere existierenden Task {existing_task.task_id}"
+                )
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "simulation_id": simulation_id,
+                        "task_id": existing_task.task_id,
+                        "status": "preparing",
+                        "message": t('api.prepareAlreadyRunning'),
+                        "already_prepared": False,
+                        "expected_entities_count": state.entities_count,
+                        "entity_types": state.entity_types,
+                    }
+                })
+
         # ========== 同步获取实体数量（在后台任务启动前） ==========
         # 这样前端在调用prepare后立即就能获取到预期Agent总数
         try:
@@ -479,8 +506,7 @@ def prepare_simulation():
             logger.warning(f"同步获取实体数量失败（将在后台任务中重试）: {e}")
             # 失败不影响后续流程，后台任务会重新获取
         
-        # 创建异步任务
-        task_manager = TaskManager()
+        # 创建异步任务（task_manager wurde bereits oben fuer Idempotenz-Check erstellt)
         task_id = task_manager.create_task(
             task_type="simulation_prepare",
             metadata={

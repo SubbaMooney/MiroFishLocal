@@ -170,6 +170,23 @@ class TaskManager:
             if task_type:
                 tasks = [t for t in tasks if t.task_type == task_type]
             return [t.to_dict() for t in sorted(tasks, key=lambda x: x.created_at, reverse=True)]
+
+    def find_active_task(self, task_type: str, metadata_match: Dict[str, Any]) -> Optional[Task]:
+        """Findet einen laufenden Task (PENDING/PROCESSING) mit passendem Typ + Metadata-Match.
+
+        Wird fuer Idempotenz-Gates genutzt: vor dem Spawnen eines neuen Background-
+        Threads pruefen, ob fuer dieselben Eingangs-Parameter bereits ein Task laeuft.
+        Atomar via _task_lock — kein TOCTOU.
+        """
+        with self._task_lock:
+            for task in self._tasks.values():
+                if task.task_type != task_type:
+                    continue
+                if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
+                    continue
+                if all(task.metadata.get(k) == v for k, v in metadata_match.items()):
+                    return task
+            return None
     
     def cleanup_old_tasks(self, max_age_hours: int = 24):
         """清理旧任务"""

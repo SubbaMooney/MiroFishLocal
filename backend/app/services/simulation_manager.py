@@ -59,6 +59,9 @@ class SimulationState:
     profiles_count: int = 0
     entity_types: List[str] = field(default_factory=list)
     
+    # Phase-Checkpoints (fuer Resume nach Crash/Abbruch)
+    profiles_generated: bool = False  # True nach erfolgreich abgeschlossener Phase 2
+
     # 配置生成信息
     config_generated: bool = False
     config_reasoning: str = ""
@@ -87,6 +90,7 @@ class SimulationState:
             "entities_count": self.entities_count,
             "profiles_count": self.profiles_count,
             "entity_types": self.entity_types,
+            "profiles_generated": self.profiles_generated,
             "config_generated": self.config_generated,
             "config_reasoning": self.config_reasoning,
             "current_round": self.current_round,
@@ -107,6 +111,7 @@ class SimulationState:
             "entities_count": self.entities_count,
             "profiles_count": self.profiles_count,
             "entity_types": self.entity_types,
+            "profiles_generated": self.profiles_generated,
             "config_generated": self.config_generated,
             "error": self.error,
         }
@@ -142,6 +147,33 @@ class SimulationManager:
         os.makedirs(sim_dir, exist_ok=True)
         return sim_dir
     
+    def _profile_files_exist(self, state: SimulationState, sim_dir: str) -> bool:
+        """Prueft, ob die Output-Files fuer Phase 2 vollstaendig vorhanden sind.
+
+        Wird fuer Resume genutzt: nur wenn die Files existieren, koennen wir
+        Phase 2 ueberspringen — sonst ist der Checkpoint-Flag korrupt und wir
+        regenerieren sicherheitshalber.
+        """
+        if state.enable_reddit:
+            if not os.path.exists(os.path.join(sim_dir, "reddit_profiles.json")):
+                return False
+        if state.enable_twitter:
+            if not os.path.exists(os.path.join(sim_dir, "twitter_profiles.csv")):
+                return False
+        # Sidecar fuer vollstaendige Rekonstruktion
+        if not os.path.exists(os.path.join(sim_dir, "profiles_full.json")):
+            return False
+        return True
+
+    def _load_existing_profiles(self, state: SimulationState, sim_dir: str):
+        """Laedt zuvor generierte Profile aus der Sidecar-Datei zurueck als
+        OasisAgentProfile-Liste — fuer Resume nach erfolgreich abgeschlossener Phase 2.
+        """
+        sidecar_path = os.path.join(sim_dir, "profiles_full.json")
+        with open(sidecar_path, 'r', encoding='utf-8') as f:
+            sidecar_data = json.load(f)
+        return [OasisAgentProfile.from_dict(item) for item in sidecar_data]
+
     def _save_simulation_state(self, state: SimulationState):
         """保存模拟状态到文件"""
         sim_dir = self._get_simulation_dir(state.simulation_id)
@@ -178,6 +210,7 @@ class SimulationManager:
             entities_count=data.get("entities_count", 0),
             profiles_count=data.get("profiles_count", 0),
             entity_types=data.get("entity_types", []),
+            profiles_generated=data.get("profiles_generated", False),
             config_generated=data.get("config_generated", False),
             config_reasoning=data.get("config_reasoning", ""),
             current_round=data.get("current_round", 0),
@@ -303,83 +336,101 @@ class SimulationManager:
             
             # ========== 阶段2: 生成Agent Profile ==========
             total_entities = len(filtered.entities)
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 0,
-                    t('progress.startGenerating'),
-                    current=0,
-                    total=total_entities
-                )
-            
-            # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
             generator = OasisProfileGenerator(graph_id=state.graph_id)
-            
-            def profile_progress(current, total, msg):
+
+            # Resume-Pfad: Phase 2 wurde in vorherigem Lauf bereits abgeschlossen
+            # → Profile aus Datei laden statt neu generieren (spart bei 3000+ Personas
+            # Stunden + redundante LLM-Kosten).
+            if state.profiles_generated and self._profile_files_exist(state, sim_dir):
+                logger.info(
+                    f"Phase 2 bereits abgeschlossen fuer {simulation_id} "
+                    f"(profiles_generated=True), ueberspringe Persona-Generierung"
+                )
+                profiles = self._load_existing_profiles(state, sim_dir)
+                state.profiles_count = len(profiles)
                 if progress_callback:
                     progress_callback(
-                        "generating_profiles", 
-                        int(current / total * 100), 
-                        msg,
-                        current=current,
-                        total=total,
-                        item_name=msg
+                        "generating_profiles", 100,
+                        t('progress.profilesResumed', count=len(profiles)),
+                        current=len(profiles),
+                        total=len(profiles)
                     )
-            
-            # 设置实时保存的文件路径（优先使用 Reddit JSON 格式）
-            realtime_output_path = None
-            realtime_platform = "reddit"
-            if state.enable_reddit:
-                realtime_output_path = os.path.join(sim_dir, "reddit_profiles.json")
+            else:
+                if progress_callback:
+                    progress_callback(
+                        "generating_profiles", 0,
+                        t('progress.startGenerating'),
+                        current=0,
+                        total=total_entities
+                    )
+
+                def profile_progress(current, total, msg):
+                    if progress_callback:
+                        progress_callback(
+                            "generating_profiles",
+                            int(current / total * 100),
+                            msg,
+                            current=current,
+                            total=total,
+                            item_name=msg
+                        )
+
+                # 设置实时保存的文件路径（优先使用 Reddit JSON 格式）
+                realtime_output_path = None
                 realtime_platform = "reddit"
-            elif state.enable_twitter:
-                realtime_output_path = os.path.join(sim_dir, "twitter_profiles.csv")
-                realtime_platform = "twitter"
-            
-            profiles = generator.generate_profiles_from_entities(
-                entities=filtered.entities,
-                use_llm=use_llm_for_profiles,
-                progress_callback=profile_progress,
-                graph_id=state.graph_id,  # 传入graph_id用于Zep检索
-                parallel_count=parallel_profile_count,  # 并行生成数量
-                realtime_output_path=realtime_output_path,  # 实时保存路径
-                output_platform=realtime_platform  # 输出格式
-            )
-            
-            state.profiles_count = len(profiles)
-            
-            # 保存Profile文件（注意：Twitter使用CSV格式，Reddit使用JSON格式）
-            # Reddit 已经在生成过程中实时保存了，这里再保存一次确保完整性
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 95,
-                    t('progress.savingProfiles'),
-                    current=total_entities,
-                    total=total_entities
+                if state.enable_reddit:
+                    realtime_output_path = os.path.join(sim_dir, "reddit_profiles.json")
+                    realtime_platform = "reddit"
+                elif state.enable_twitter:
+                    realtime_output_path = os.path.join(sim_dir, "twitter_profiles.csv")
+                    realtime_platform = "twitter"
+
+                profiles = generator.generate_profiles_from_entities(
+                    entities=filtered.entities,
+                    use_llm=use_llm_for_profiles,
+                    progress_callback=profile_progress,
+                    graph_id=state.graph_id,
+                    parallel_count=parallel_profile_count,
+                    realtime_output_path=realtime_output_path,
+                    output_platform=realtime_platform
                 )
-            
-            if state.enable_reddit:
-                generator.save_profiles(
-                    profiles=profiles,
-                    file_path=os.path.join(sim_dir, "reddit_profiles.json"),
-                    platform="reddit"
-                )
-            
-            if state.enable_twitter:
-                # Twitter使用CSV格式！这是OASIS的要求
-                generator.save_profiles(
-                    profiles=profiles,
-                    file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
-                    platform="twitter"
-                )
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 100,
-                    t('progress.profilesComplete', count=len(profiles)),
-                    current=len(profiles),
-                    total=len(profiles)
-                )
+
+                state.profiles_count = len(profiles)
+
+                if progress_callback:
+                    progress_callback(
+                        "generating_profiles", 95,
+                        t('progress.savingProfiles'),
+                        current=total_entities,
+                        total=total_entities
+                    )
+
+                if state.enable_reddit:
+                    generator.save_profiles(
+                        profiles=profiles,
+                        file_path=os.path.join(sim_dir, "reddit_profiles.json"),
+                        platform="reddit"
+                    )
+
+                if state.enable_twitter:
+                    # Twitter使用CSV格式！这是OASIS的要求
+                    generator.save_profiles(
+                        profiles=profiles,
+                        file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
+                        platform="twitter"
+                    )
+
+                # Phase-2-Checkpoint setzen: ab jetzt nicht mehr regenerieren bei Re-Run
+                state.profiles_generated = True
+                self._save_simulation_state(state)
+
+                if progress_callback:
+                    progress_callback(
+                        "generating_profiles", 100,
+                        t('progress.profilesComplete', count=len(profiles)),
+                        current=len(profiles),
+                        total=len(profiles)
+                    )
             
             # ========== 阶段3: LLM智能生成模拟配置 ==========
             if progress_callback:

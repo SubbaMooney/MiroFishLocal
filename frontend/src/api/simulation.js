@@ -10,10 +10,15 @@ export const createSimulation = (data) => {
 
 /**
  * 准备模拟环境（异步任务）
+ *
+ * Kein requestWithRetry: Endpoint returnt instant einen task_id und spawnt
+ * einen Background-Thread. Retries waeren state-mutating und wuerden mehrfach
+ * Persona-Pools triggern. Backend-Idempotenz (find_active_task) schuetzt zusaetzlich,
+ * aber das Frontend soll erst gar keine Duplikate erzeugen.
  * @param {Object} data - { simulation_id, entity_types?, use_llm_for_profiles?, parallel_profile_count?, force_regenerate? }
  */
 export const prepareSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/prepare', data), 3, 1000)
+  return service.post('/api/simulation/prepare', data)
 }
 
 /**

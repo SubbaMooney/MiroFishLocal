@@ -9,6 +9,7 @@ OASIS Agent Profile生成器
 """
 
 import json
+import os
 import random
 import time
 from typing import Dict, Any, List, Optional
@@ -137,6 +138,30 @@ class OasisAgentProfile:
             "source_entity_type": self.source_entity_type,
             "created_at": self.created_at,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "OasisAgentProfile":
+        """Rekonstruiert OasisAgentProfile aus to_dict-Output (fuer Resume aus Sidecar-Datei)."""
+        return cls(
+            user_id=data["user_id"],
+            user_name=data["user_name"],
+            name=data["name"],
+            bio=data["bio"],
+            persona=data["persona"],
+            karma=data.get("karma", 1000),
+            friend_count=data.get("friend_count", 100),
+            follower_count=data.get("follower_count", 150),
+            statuses_count=data.get("statuses_count", 500),
+            age=data.get("age"),
+            gender=data.get("gender"),
+            mbti=data.get("mbti"),
+            country=data.get("country"),
+            profession=data.get("profession"),
+            interested_topics=data.get("interested_topics", []),
+            source_entity_uuid=data.get("source_entity_uuid"),
+            source_entity_type=data.get("source_entity_type"),
+            created_at=data.get("created_at", datetime.now().strftime("%Y-%m-%d")),
+        )
 
 
 class OasisProfileGenerator:
@@ -821,18 +846,26 @@ class OasisProfileGenerator:
         completed_count = [0]  # 使用列表以便在闭包中修改
         lock = Lock()
         
+        # Sidecar-Pfad fuer Resume-Daten — enthaelt to_dict() jedes Profils
+        # inkl. source_entity_uuid (das in to_reddit_format/to_twitter_format
+        # bewusst fehlt, weil OASIS strict-formatierte Files erwartet).
+        sidecar_path = (
+            os.path.join(os.path.dirname(realtime_output_path), "profiles_full.json")
+            if realtime_output_path else None
+        )
+
         # 实时写入文件的辅助函数
         def save_profiles_realtime():
-            """实时保存已生成的 profiles 到文件"""
+            """实时保存已生成的 profiles 到文件 + Sidecar fuer Resume"""
             if not realtime_output_path:
                 return
-            
+
             with lock:
                 # 过滤出已生成的 profiles
                 existing_profiles = [p for p in profiles if p is not None]
                 if not existing_profiles:
                     return
-                
+
                 try:
                     if output_platform == "reddit":
                         # Reddit JSON 格式
@@ -849,6 +882,12 @@ class OasisProfileGenerator:
                                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                                 writer.writeheader()
                                 writer.writerows(profiles_data)
+
+                    # Sidecar mit vollen Profile-Daten (inkl. source_entity_uuid)
+                    if sidecar_path:
+                        sidecar_data = [p.to_dict() for p in existing_profiles]
+                        with open(sidecar_path, 'w', encoding='utf-8') as f:
+                            json.dump(sidecar_data, f, ensure_ascii=False, indent=2)
                 except Exception as e:
                     logger.warning(f"实时保存 profiles 失败: {e}")
         
@@ -886,17 +925,56 @@ class OasisProfileGenerator:
                 )
                 return idx, fallback_profile, str(e)
         
-        logger.info(f"开始并行生成 {total} 个Agent人设（并行数: {parallel_count}）...")
+        # Resume-Logik: bereits generierte Personas aus Sidecar uebernehmen.
+        # Spart bei Crash/Neustart die LLM-Kosten fuer bereits fertige Entities.
+        completed_uuids: set = set()
+        if sidecar_path and os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, 'r', encoding='utf-8') as f:
+                    sidecar_data = json.load(f)
+                # Mapping uuid -> OasisAgentProfile aus Sidecar bauen
+                resume_map: Dict[str, OasisAgentProfile] = {}
+                for item in sidecar_data:
+                    uid = item.get("source_entity_uuid")
+                    if uid:
+                        resume_map[uid] = OasisAgentProfile.from_dict(item)
+                # Profile-Slots befuellen fuer alle Entities, die schon fertig sind
+                for idx, entity in enumerate(entities):
+                    cached = resume_map.get(entity.uuid)
+                    if cached:
+                        # user_id aktualisieren auf aktuellen idx (Reihenfolge kann sich aendern)
+                        cached.user_id = idx
+                        profiles[idx] = cached
+                        completed_uuids.add(entity.uuid)
+                        completed_count[0] += 1
+                if completed_uuids:
+                    logger.info(
+                        f"Resume: {len(completed_uuids)}/{total} Personas aus "
+                        f"{sidecar_path} uebernommen, generiere nur fehlende {total - len(completed_uuids)}"
+                    )
+            except Exception as e:
+                logger.warning(f"Resume-Sidecar konnte nicht gelesen werden, starte komplett neu: {e}")
+                completed_uuids = set()
+
+        # Nur Entities einreihen, die noch nicht generiert sind
+        todo_entities = [(idx, e) for idx, e in enumerate(entities) if e.uuid not in completed_uuids]
+        remaining = len(todo_entities)
+
+        logger.info(
+            f"开始并行生成 {remaining}/{total} 个Agent人设（并行数: {parallel_count}）"
+            + (f"，{len(completed_uuids)} 已从 Resume 恢复" if completed_uuids else "")
+        )
         print(f"\n{'='*60}")
-        print(f"开始生成Agent人设 - 共 {total} 个实体，并行数: {parallel_count}")
+        print(f"开始生成Agent人设 - 共 {total} 个实体，并行数: {parallel_count}"
+              + (f"（{len(completed_uuids)} 已恢复，剩余 {remaining}）" if completed_uuids else ""))
         print(f"{'='*60}\n")
-        
+
         # 使用线程池并行执行
         with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
-            # 提交所有任务
+            # 提交所有任务（nur die noch nicht erledigten)
             future_to_entity = {
                 executor.submit(generate_single_profile, idx, entity): (idx, entity)
-                for idx, entity in enumerate(entities)
+                for idx, entity in todo_entities
             }
             
             # 收集结果
