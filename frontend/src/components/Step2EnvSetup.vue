@@ -785,8 +785,8 @@ const startPrepareSimulation = async () => {
   try {
     const res = await prepareSimulation({
       simulation_id: props.simulationId,
-      use_llm_for_profiles: true,
-      parallel_profile_count: 5
+      use_llm_for_profiles: true
+      // parallel_profile_count weglassen → Backend-Default greift (aktuell 15)
     })
     
     if (res.success && res.data) {

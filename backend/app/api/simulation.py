@@ -373,7 +373,7 @@ def prepare_simulation():
             "simulation_id": "sim_xxxx",                   // 必填，模拟ID
             "entity_types": ["Student", "PublicFigure"],  // 可选，指定实体类型
             "use_llm_for_profiles": true,                 // 可选，是否用LLM生成人设
-            "parallel_profile_count": 5,                  // 可选，并行生成人设数量，默认5
+            "parallel_profile_count": 25,                 // 可选，并行生成人设数量，默认25
             "force_regenerate": false                     // 可选，强制重新生成，默认false
         }
     
@@ -458,7 +458,7 @@ def prepare_simulation():
         
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
-        parallel_profile_count = data.get('parallel_profile_count', 5)
+        parallel_profile_count = data.get('parallel_profile_count', 25)
 
         # Idempotenz-Gate: Wenn bereits ein Prepare-Task fuer diese simulation_id
         # laeuft, dessen task_id zurueckgeben statt neuen Thread zu spawnen.
