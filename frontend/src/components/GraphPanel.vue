@@ -232,6 +232,15 @@
       </label>
       <span class="toggle-label">Show Edge Labels</span>
     </div>
+
+    <!-- Stabile Knotenpositionen über Updates hinweg -->
+    <div v-if="graphData" class="sticky-positions-toggle">
+      <label class="toggle-switch">
+        <input type="checkbox" v-model="stickyPositions" />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">{{ $t('graph.stickyPositions') }}</span>
+    </div>
   </div>
 </template>
 
@@ -252,6 +261,7 @@ const graphContainer = ref(null)
 const graphSvg = ref(null)
 const selectedItem = ref(null)
 const showEdgeLabels = ref(true) // 默认显示边标签
+const stickyPositions = ref(false) // Knotenpositionen stabil über Updates halten (Default off)
 const expandedSelfLoops = ref(new Set()) // 展开的自环项
 const showSimulationFinishedHint = ref(false) // 模拟结束后的提示
 const wasSimulating = ref(false) // 追踪之前是否在模拟中
@@ -324,6 +334,10 @@ const closeDetailPanel = () => {
 let currentSimulation = null
 let linkLabelsRef = null
 let linkLabelBgRef = null
+// Persistierter Zoom-State, damit View bei Graph-Updates nicht zurückspringt
+let currentZoomTransform = null
+// Knoten-Positions-Cache (uuid -> {x, y}) — nur aktiv wenn stickyPositions=true
+const nodePositionCache = {}
 
 const renderGraph = () => {
   if (!graphSvg.value || !props.graphData) return
@@ -353,12 +367,25 @@ const renderGraph = () => {
   const nodeMap = {}
   nodesData.forEach(n => nodeMap[n.uuid] = n)
   
-  const nodes = nodesData.map(n => ({
-    id: n.uuid,
-    name: n.name || 'Unnamed',
-    type: n.labels?.find(l => l !== 'Entity') || 'Entity',
-    rawData: n
-  }))
+  const nodes = nodesData.map(n => {
+    const node = {
+      id: n.uuid,
+      name: n.name || 'Unnamed',
+      type: n.labels?.find(l => l !== 'Entity') || 'Entity',
+      rawData: n
+    }
+    // Sticky-Modus: Bekannte Positionen pinnen, neue Knoten frei einfügen lassen
+    if (stickyPositions.value) {
+      const cached = nodePositionCache[n.uuid]
+      if (cached) {
+        node.x = cached.x
+        node.y = cached.y
+        node.fx = cached.x
+        node.fy = cached.y
+      }
+    }
+    return node
+  })
   
   const nodeIds = new Set(nodes.map(n => n.id))
   
@@ -468,40 +495,52 @@ const renderGraph = () => {
   entityTypes.value.forEach(t => colorMap[t.name] = t.color)
   const getColor = (type) => colorMap[type] || '#999'
 
-  // Simulation - 根据边数量动态调整节点间距
-  // Performance-Tuning fuer grosse Graphen (>200 Nodes):
-  //   * alphaDecay 0.05 statt default 0.0228 -> ~3x schnellere Konvergenz
-  //   * alphaMin 0.02 statt default 0.001    -> Simulation stoppt frueher
-  //   * velocityDecay 0.5 statt default 0.4  -> weniger Momentum
-  //   * forceCollide skaliert mit Node-Count -> kleinerer Radius bei 400+
-  const isLargeGraph = nodes.length > 200
-  const collideRadius = isLargeGraph ? 25 : 50
-  const chargeStrength = isLargeGraph ? -200 : -400
+  // Simulation - stufenlose √N-Skalierung statt binärem Threshold.
+  // Performance-Tunings (alphaDecay/alphaMin/velocityDecay) bleiben — sie sind
+  // nicht das Pileup-Problem. Räumliche Parameter wachsen mit sqrt(nodes.length / 100):
+  //   scale = 1.0 @ 100 Nodes, ~2.0 @ 400, ~3.16 @ 1000
+  // → mehr Knoten erhalten automatisch mehr Fläche, ohne Cutoff der Repulsion.
+  const scale = Math.max(1, Math.sqrt(nodes.length / 100))
+  const linkBaseDistance = 90 * scale
+  const collideRadius = 30 * Math.sqrt(scale)
+  const chargeStrength = -300 * scale
+  const chargeDistanceMax = Math.max(width, height)
+  const centerPullStrength = 0.04 / scale
   const simulation = d3.forceSimulation(nodes)
     .alphaDecay(0.05)
     .alphaMin(0.02)
     .velocityDecay(0.5)
     .force('link', d3.forceLink(edges).id(d => d.id).distance(d => {
-      // 根据这对节点之间的边数量动态调整距离
-      const baseDistance = isLargeGraph ? 80 : 150
       const edgeCount = d.pairTotal || 1
-      return baseDistance + (edgeCount - 1) * 40
+      return linkBaseDistance + (edgeCount - 1) * 40
     }))
-    .force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(isLargeGraph ? 300 : 1000))
+    .force('charge', d3.forceManyBody()
+      .strength(chargeStrength)
+      .distanceMax(chargeDistanceMax))
     .force('center', d3.forceCenter(width / 2, height / 2))
     .force('collide', d3.forceCollide(collideRadius))
-    // 添加向中心的引力，让独立的节点群聚集到中心区域
-    .force('x', d3.forceX(width / 2).strength(0.04))
-    .force('y', d3.forceY(height / 2).strength(0.04))
+    // Center-Pull schwächt sich bei großen Graphs ab, damit das Layout expandieren kann
+    .force('x', d3.forceX(width / 2).strength(centerPullStrength))
+    .force('y', d3.forceY(height / 2).strength(centerPullStrength))
   
   currentSimulation = simulation
 
   const g = svg.append('g')
-  
-  // Zoom
-  svg.call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
-    g.attr('transform', event.transform)
-  }))
+
+  // Zoom — Transform wird zwischen Re-Renders persistiert,
+  // damit User-Pan/Zoom bei Graph-Updates nicht verloren geht.
+  const zoomBehavior = d3.zoom()
+    .extent([[0, 0], [width, height]])
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform)
+      currentZoomTransform = event.transform
+    })
+  svg.call(zoomBehavior)
+  if (currentZoomTransform) {
+    // Vorherige View wiederherstellen (ohne 'zoom'-Event auszulösen)
+    svg.call(zoomBehavior.transform, currentZoomTransform)
+  }
 
   // Links - 使用 path 支持曲线
   const linkGroup = g.append('g').attr('class', 'links')
@@ -710,8 +749,13 @@ const renderGraph = () => {
         if (d._isDragging) {
           simulation.alphaTarget(0)
         }
-        d.fx = null
-        d.fy = null
+        // Sticky-Modus: Knoten an seiner neuen Position pinnen statt freizugeben
+        if (stickyPositions.value) {
+          nodePositionCache[d.id] = { x: d.x, y: d.y }
+        } else {
+          d.fx = null
+          d.fy = null
+        }
         d._isDragging = false
       })
     )
@@ -791,6 +835,13 @@ const renderGraph = () => {
     nodeLabels
       .attr('x', d => d.x)
       .attr('y', d => d.y)
+
+    // Sticky-Modus: Positionen kontinuierlich cachen, damit nächstes Update sie restauriert
+    if (stickyPositions.value) {
+      for (const n of nodes) {
+        nodePositionCache[n.id] = { x: n.x, y: n.y }
+      }
+    }
   })
   
   // 点击空白处关闭详情面板
@@ -814,6 +865,28 @@ watch(showEdgeLabels, (newVal) => {
   }
   if (linkLabelBgRef) {
     linkLabelBgRef.style('display', newVal ? 'block' : 'none')
+  }
+})
+
+// Toggle Knoten-Positions-Stabilität: sofortige Wirkung auf laufende Simulation
+watch(stickyPositions, (enabled) => {
+  if (!currentSimulation) return
+  const simNodes = currentSimulation.nodes()
+  if (enabled) {
+    // Aktuelle Positionen sofort fixieren und cachen
+    for (const n of simNodes) {
+      n.fx = n.x
+      n.fy = n.y
+      nodePositionCache[n.id] = { x: n.x, y: n.y }
+    }
+  } else {
+    // Fixierung lösen, Cache leeren, sanft re-layout
+    for (const n of simNodes) {
+      n.fx = null
+      n.fy = null
+    }
+    for (const k of Object.keys(nodePositionCache)) delete nodePositionCache[k]
+    currentSimulation.alpha(0.3).restart()
   }
 })
 
@@ -984,6 +1057,21 @@ onUnmounted(() => {
 .edge-labels-toggle {
   position: absolute;
   top: 60px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #FFF;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid #E0E0E0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  z-index: 10;
+}
+
+.sticky-positions-toggle {
+  position: absolute;
+  top: 110px;
   right: 20px;
   display: flex;
   align-items: center;
