@@ -212,6 +212,7 @@ class SimulationConfigGenerator:
     
     # 上下文最大字符数
     MAX_CONTEXT_LENGTH = 50000
+    AGENT_CONFIG_PARALLEL = 5            # parallele LLM-Calls fuer Agent-Config-Batches
     # 每批生成的Agent数量
     AGENTS_PER_BATCH = 15
     
@@ -305,25 +306,48 @@ class SimulationConfigGenerator:
         event_config = self._parse_event_config(event_config_result)
         reasoning_parts.append(f"{t('progress.eventConfigLabel')}: {event_config_result.get('reasoning', t('common.success'))}")
         
-        # ========== 步骤3-N: 分批生成Agent配置 ==========
-        all_agent_configs = []
-        for batch_idx in range(num_batches):
+        # ========== 步骤3-N: 分批生成Agent配置 (parallel) ==========
+        # Jeder Batch ist unabhaengig (siehe _generate_agent_configs_batch: pure func).
+        # Reihenfolge der finalen Liste muss erhalten bleiben (agent_id basiert auf
+        # start_idx), darum schreiben wir Ergebnisse positionsweise in batch_results.
+        import concurrent.futures
+        import threading
+
+        batch_results: List[Optional[List["AgentActivityConfig"]]] = [None] * num_batches
+        completed_lock = threading.Lock()
+        completed = [0]
+
+        def _run_batch(batch_idx: int):
             start_idx = batch_idx * self.AGENTS_PER_BATCH
             end_idx = min(start_idx + self.AGENTS_PER_BATCH, len(entities))
             batch_entities = entities[start_idx:end_idx]
-            
-            report_progress(
-                3 + batch_idx,
-                t('progress.generatingAgentConfig', start=start_idx + 1, end=end_idx, total=len(entities))
-            )
-            
-            batch_configs = self._generate_agent_configs_batch(
+            return batch_idx, start_idx, end_idx, self._generate_agent_configs_batch(
                 context=context,
                 entities=batch_entities,
                 start_idx=start_idx,
-                simulation_requirement=simulation_requirement
+                simulation_requirement=simulation_requirement,
             )
-            all_agent_configs.extend(batch_configs)
+
+        worker_count = max(1, min(self.AGENT_CONFIG_PARALLEL, num_batches))
+        logger.info(f"Agent-Config Generation: {num_batches} batches, parallel={worker_count}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = [executor.submit(_run_batch, idx) for idx in range(num_batches)]
+            for future in concurrent.futures.as_completed(futures):
+                batch_idx, start_idx, end_idx, batch_configs = future.result()
+                batch_results[batch_idx] = batch_configs
+                with completed_lock:
+                    completed[0] += 1
+                    progress_step = 2 + completed[0]
+                report_progress(
+                    progress_step,
+                    t('progress.generatingAgentConfig', start=start_idx + 1, end=end_idx, total=len(entities))
+                )
+
+        all_agent_configs: List["AgentActivityConfig"] = []
+        for r in batch_results:
+            if r:
+                all_agent_configs.extend(r)
         
         reasoning_parts.append(t('progress.agentConfigResult', count=len(all_agent_configs)))
         
