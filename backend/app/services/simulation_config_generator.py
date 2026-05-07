@@ -12,6 +12,8 @@
 
 import json
 import math
+import os
+import threading
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -213,6 +215,7 @@ class SimulationConfigGenerator:
     # 上下文最大字符数
     MAX_CONTEXT_LENGTH = 50000
     AGENT_CONFIG_PARALLEL = 5            # parallele LLM-Calls fuer Agent-Config-Batches
+    CHECKPOINT_FILENAME = "config_progress.json"  # Sidecar fuer Phase-3-Resume
     # 每批生成的Agent数量
     AGENTS_PER_BATCH = 15
     
@@ -271,7 +274,18 @@ class SimulationConfigGenerator:
             SimulationParameters: 完整的模拟参数
         """
         logger.info(f"开始智能生成模拟配置: simulation_id={simulation_id}, 实体数={len(entities)}")
-        
+
+        # Checkpoint laden (resume nach Crash/Abbruch)
+        checkpoint_path = self._checkpoint_path(simulation_id)
+        checkpoint = self._load_config_checkpoint(checkpoint_path)
+        checkpoint_lock = threading.Lock()
+        if any([checkpoint["time_config_result"], checkpoint["event_config_result"], checkpoint["completed_batches"]]):
+            logger.info(
+                f"Phase-3-Checkpoint gefunden: time={'OK' if checkpoint['time_config_result'] else '-'}, "
+                f"event={'OK' if checkpoint['event_config_result'] else '-'}, "
+                f"agent_batches={len(checkpoint['completed_batches'])}"
+            )
+
         # 计算总步骤数
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
         total_steps = 3 + num_batches  # 时间配置 + 事件配置 + N批Agent + 平台配置
@@ -296,26 +310,53 @@ class SimulationConfigGenerator:
         # ========== 步骤1: 生成时间配置 ==========
         report_progress(1, t('progress.generatingTimeConfig'))
         num_entities = len(entities)
-        time_config_result = self._generate_time_config(context, num_entities)
+        if checkpoint["time_config_result"]:
+            time_config_result = checkpoint["time_config_result"]
+            logger.info("Phase-3 step 1: time_config aus Checkpoint uebernommen")
+        else:
+            time_config_result = self._generate_time_config(context, num_entities)
+            checkpoint["time_config_result"] = time_config_result
+            self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
         time_config = self._parse_time_config(time_config_result, num_entities)
         reasoning_parts.append(f"{t('progress.timeConfigLabel')}: {time_config_result.get('reasoning', t('common.success'))}")
-        
+
         # ========== 步骤2: 生成事件配置 ==========
         report_progress(2, t('progress.generatingEventConfig'))
-        event_config_result = self._generate_event_config(context, simulation_requirement, entities)
+        if checkpoint["event_config_result"]:
+            event_config_result = checkpoint["event_config_result"]
+            logger.info("Phase-3 step 2: event_config aus Checkpoint uebernommen")
+        else:
+            event_config_result = self._generate_event_config(context, simulation_requirement, entities)
+            checkpoint["event_config_result"] = event_config_result
+            self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
         event_config = self._parse_event_config(event_config_result)
         reasoning_parts.append(f"{t('progress.eventConfigLabel')}: {event_config_result.get('reasoning', t('common.success'))}")
         
-        # ========== 步骤3-N: 分批生成Agent配置 (parallel) ==========
-        # Jeder Batch ist unabhaengig (siehe _generate_agent_configs_batch: pure func).
-        # Reihenfolge der finalen Liste muss erhalten bleiben (agent_id basiert auf
-        # start_idx), darum schreiben wir Ergebnisse positionsweise in batch_results.
+        # ========== 步骤3-N: 分批生成Agent配置 (parallel + resume) ==========
+        # Jeder Batch ist unabhaengig (pure func). Reihenfolge bleibt durch
+        # batch_results[batch_idx] erhalten. Bereits gespeicherte Batches werden
+        # aus dem Checkpoint geladen und nicht erneut LLM-generiert.
         import concurrent.futures
-        import threading
 
-        batch_results: List[Optional[List["AgentActivityConfig"]]] = [None] * num_batches
-        completed_lock = threading.Lock()
-        completed = [0]
+        batch_results: List[Optional[List[AgentActivityConfig]]] = [None] * num_batches
+        completed_count = [0]
+
+        # 1) Aus Checkpoint geladene Batches direkt einsetzen
+        for idx_str, batch_data in checkpoint["completed_batches"].items():
+            try:
+                bi = int(idx_str)
+                if 0 <= bi < num_batches:
+                    batch_results[bi] = [AgentActivityConfig(**d) for d in batch_data]
+                    completed_count[0] += 1
+            except Exception as e:
+                logger.warning(f"Phase-3-Checkpoint: Batch {idx_str} ungueltig, wird neu generiert: {e}")
+
+        pending_indices = [i for i in range(num_batches) if batch_results[i] is None]
+        logger.info(
+            f"Agent-Config: {num_batches} batches total, "
+            f"{len(pending_indices)} pending, {completed_count[0]} aus Checkpoint, "
+            f"parallel={min(self.AGENT_CONFIG_PARALLEL, max(1, len(pending_indices)))}"
+        )
 
         def _run_batch(batch_idx: int):
             start_idx = batch_idx * self.AGENTS_PER_BATCH
@@ -328,23 +369,25 @@ class SimulationConfigGenerator:
                 simulation_requirement=simulation_requirement,
             )
 
-        worker_count = max(1, min(self.AGENT_CONFIG_PARALLEL, num_batches))
-        logger.info(f"Agent-Config Generation: {num_batches} batches, parallel={worker_count}")
+        if pending_indices:
+            worker_count = max(1, min(self.AGENT_CONFIG_PARALLEL, len(pending_indices)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [executor.submit(_run_batch, idx) for idx in pending_indices]
+                for future in concurrent.futures.as_completed(futures):
+                    batch_idx, start_idx, end_idx, batch_configs = future.result()
+                    batch_results[batch_idx] = batch_configs
+                    # Checkpoint inkrementell aktualisieren (atomar via Lock + tmp+rename)
+                    with checkpoint_lock:
+                        checkpoint["completed_batches"][str(batch_idx)] = [asdict(c) for c in batch_configs]
+                        completed_count[0] += 1
+                        progress_step = 2 + completed_count[0]
+                    self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
+                    report_progress(
+                        progress_step,
+                        t('progress.generatingAgentConfig', start=start_idx + 1, end=end_idx, total=len(entities))
+                    )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
-            futures = [executor.submit(_run_batch, idx) for idx in range(num_batches)]
-            for future in concurrent.futures.as_completed(futures):
-                batch_idx, start_idx, end_idx, batch_configs = future.result()
-                batch_results[batch_idx] = batch_configs
-                with completed_lock:
-                    completed[0] += 1
-                    progress_step = 2 + completed[0]
-                report_progress(
-                    progress_step,
-                    t('progress.generatingAgentConfig', start=start_idx + 1, end=end_idx, total=len(entities))
-                )
-
-        all_agent_configs: List["AgentActivityConfig"] = []
+        all_agent_configs: List[AgentActivityConfig] = []
         for r in batch_results:
             if r:
                 all_agent_configs.extend(r)
@@ -399,7 +442,15 @@ class SimulationConfigGenerator:
         )
         
         logger.info(f"模拟配置生成完成: {len(params.agent_configs)} 个Agent配置")
-        
+
+        # Phase-3-Checkpoint loeschen — Generierung war erfolgreich
+        try:
+            if os.path.exists(checkpoint_path):
+                os.remove(checkpoint_path)
+                logger.debug(f"Phase-3-Checkpoint geloescht: {checkpoint_path}")
+        except Exception as e:
+            logger.warning(f"Phase-3-Checkpoint konnte nicht geloescht werden: {e}")
+
         return params
     
     def _build_context(
@@ -556,6 +607,40 @@ class SimulationConfigGenerator:
         
         return None
     
+    # ========== Phase-3-Checkpoint-Helpers ==========
+    # Sidecar `config_progress.json` ermoeglicht Resume nach Crash/Abbruch:
+    # - time_config_result, event_config_result werden cached
+    # - completed_batches: dict batch_idx -> List[asdict(AgentActivityConfig)]
+    # Atomare Writes (tmp + rename), Lock fuer parallele Worker.
+
+    def _checkpoint_path(self, simulation_id: str) -> str:
+        return os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id, self.CHECKPOINT_FILENAME)
+
+    def _load_config_checkpoint(self, path: str) -> Dict[str, Any]:
+        if not os.path.exists(path):
+            return {"time_config_result": None, "event_config_result": None, "completed_batches": {}}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            data.setdefault("time_config_result", None)
+            data.setdefault("event_config_result", None)
+            data.setdefault("completed_batches", {})
+            return data
+        except Exception as e:
+            logger.warning(f"Phase-3-Checkpoint konnte nicht gelesen werden, starte komplett neu: {e}")
+            return {"time_config_result": None, "event_config_result": None, "completed_batches": {}}
+
+    def _save_config_checkpoint(self, path: str, state: Dict[str, Any], lock: threading.Lock):
+        with lock:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                tmp = path + ".tmp"
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(state, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, path)
+            except Exception as e:
+                logger.warning(f"Phase-3-Checkpoint konnte nicht gespeichert werden: {e}")
+
     def _generate_time_config(self, context: str, num_entities: int) -> Dict[str, Any]:
         """生成时间配置"""
         # 使用配置的上下文截断长度
