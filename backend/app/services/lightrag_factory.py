@@ -21,12 +21,16 @@ Folge-Operationen MUESSEN ueber denselben langlebigen Loop laufen — siehe
 from __future__ import annotations
 
 import asyncio
+import inspect
+import logging
 from typing import Any, Awaitable, Callable, Optional
 
 import numpy as np
 from openai import OpenAI
 
 from ..config import Config
+
+_logger = logging.getLogger('mirofish.lightrag_factory')
 
 
 def _get_llm_client() -> OpenAI:
@@ -224,13 +228,24 @@ async def create_rag(
       - ``entity_extract_max_gleaning``: 0 = Single-Pass (Default-LightRAG: 1)
       - ``max_extract_input_tokens``: Safety-Cap fuer grosse Chunks
       - Examples-Drop: ueber ``_apply_prompts_optimization`` (process-wide)
+
+    Pipeline-Concurrency-Knobs (Tier 2.2 — Stateful-Forging-Plan):
+      - ``llm_model_max_async``: parallele LLM-Calls (Default 4)
+      - ``embedding_func_max_async``: parallele Embedding-Calls (Default 8) —
+        Embedding- und LLM-Phase laufen so producer-consumer-style ueberlappend,
+        statt seriell. Inserts bleiben pro Instanz serialisiert ueber
+        ``RagManager._instance_locks``; nur die interne Pipeline parallelisiert.
     """
     from lightrag import LightRAG
     from lightrag.kg.shared_storage import initialize_pipeline_status
 
     _apply_prompts_optimization()
 
-    rag = LightRAG(
+    # Defensiver Build der Kwargs: Pipeline-Concurrency-Knobs werden nur
+    # uebergeben, wenn die installierte LightRAG-Version sie kennt. Aeltere
+    # Versionen (vor v1.4.x) kennen die Parameter ggf. nicht — wir wollen den
+    # Import dann nicht hart brechen.
+    rag_kwargs: dict[str, Any] = dict(
         working_dir=working_dir,
         llm_model_func=create_llm_func(
             system_prompt_hint_provider=system_prompt_hint_provider,
@@ -241,6 +256,26 @@ async def create_rag(
         entity_extract_max_gleaning=Config.LIGHTRAG_MAX_GLEANING,
         max_extract_input_tokens=Config.LIGHTRAG_MAX_EXTRACT_INPUT_TOKENS,
     )
+    try:
+        _supported = set(inspect.signature(LightRAG.__init__).parameters)
+    except (TypeError, ValueError):  # noqa: BLE001 — defensive fallback
+        _supported = set()
+    if 'llm_model_max_async' in _supported:
+        rag_kwargs['llm_model_max_async'] = Config.LIGHTRAG_LLM_MAX_ASYNC
+    else:
+        _logger.warning(
+            "LightRAG-Version kennt 'llm_model_max_async' nicht — "
+            "Pipeline-Parallelisierung der LLM-Phase nicht aktiv."
+        )
+    if 'embedding_func_max_async' in _supported:
+        rag_kwargs['embedding_func_max_async'] = Config.LIGHTRAG_EMBEDDING_FUNC_MAX_ASYNC
+    else:
+        _logger.warning(
+            "LightRAG-Version kennt 'embedding_func_max_async' nicht — "
+            "Pipeline-Parallelisierung der Embedding-Phase nicht aktiv."
+        )
+
+    rag = LightRAG(**rag_kwargs)
     await rag.initialize_storages()
     await initialize_pipeline_status()
     return rag

@@ -223,8 +223,10 @@ class OasisProfileGenerator:
         
         # Strukturierte Graph-Reads gehen ueber EntityReader (Phase 4 Migration);
         # er sitzt auf dem RagManager-Singleton, kein Cloud-Client mehr.
+        # Eager-Init: Konstruktor ist billig (nur Singleton-Lookup, keine IO),
+        # damit faellt jede Race-Condition im ThreadPool weg (Tier 3.2 Fix).
         self.graph_id = graph_id
-        self._reader: Optional[EntityReader] = None  # lazy
+        self._reader: EntityReader = EntityReader()
     
     def generate_profile_from_entity(
         self, 
@@ -319,9 +321,6 @@ class OasisProfileGenerator:
         if not self.graph_id:
             logger.debug("kein graph_id gesetzt -> ueberspringe Entity-Suche")
             return empty
-
-        if self._reader is None:
-            self._reader = EntityReader()
 
         entity_name = entity.name
         try:

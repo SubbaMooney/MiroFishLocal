@@ -6,6 +6,7 @@
 import os
 import traceback
 import threading
+import concurrent.futures
 from flask import request, jsonify
 
 from . import graph_bp
@@ -186,28 +187,50 @@ def generate_ontology():
         logger.info(f"创建项目: {project.project_id}")
         
         # 保存文件并提取文本
+        # Tier 1.1: 先在请求线程中顺序保存所有文件 (Werkzeug FileStorage 不是线程安全的),
+        # 然后用 ThreadPoolExecutor 并行执行 I/O-bound 的文本提取 (PyMuPDF + 编码探测均会释放 GIL)。
         document_texts = []
         all_text = ""
-        
+
+        # 步骤 1: 顺序保存文件 (必须在 request-thread 内, 否则 FileStorage 流会被关闭)
+        saved_infos = []
         for file in uploaded_files:
             if file and file.filename and allowed_file(file.filename):
-                # 保存文件到项目目录
                 file_info = ProjectManager.save_file_to_project(
-                    project.project_id, 
-                    file, 
+                    project.project_id,
+                    file,
                     file.filename
                 )
                 project.files.append({
                     "filename": file_info["original_filename"],
                     "size": file_info["size"]
                 })
-                
-                # 提取文本
-                text = FileParser.extract_text(file_info["path"])
-                text = TextProcessor.preprocess_text(text)
-                document_texts.append(text)
-                all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
-        
+                saved_infos.append(file_info)
+
+        # 步骤 2: 并行提取文本 (保持 submit 顺序 → 输出确定性)
+        def _extract_one(info):
+            text = FileParser.extract_text(info["path"])
+            return TextProcessor.preprocess_text(text)
+
+        if saved_infos:
+            max_workers = min(8, len(saved_infos))
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers,
+                thread_name_prefix='mirofish-extract'
+            ) as executor:
+                # 按提交顺序保存 future, 之后按同一顺序读取结果 → 与上传顺序一致
+                futures = [executor.submit(_extract_one, info) for info in saved_infos]
+                for info, future in zip(saved_infos, futures):
+                    try:
+                        text = future.result()
+                        document_texts.append(text)
+                        all_text += f"\n\n=== {info['original_filename']} ===\n{text}"
+                    except Exception as ex:
+                        # 单个文件失败不应中断整个上传 (与 extract_from_multiple 行为一致)
+                        logger.warning(
+                            f"文件提取失败, 已跳过: {info['original_filename']} - {str(ex)}"
+                        )
+
         if not document_texts:
             ProjectManager.delete_project(project.project_id)
             return jsonify({

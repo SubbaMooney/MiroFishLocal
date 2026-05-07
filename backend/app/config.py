@@ -174,6 +174,18 @@ class Config:
     # bei Quality-Issues auf 'false' setzen.
     LIGHTRAG_DROP_EXAMPLES = os.environ.get('LIGHTRAG_DROP_EXAMPLES', 'true').lower() in ('1', 'true', 'yes')
 
+    # LightRAG Pipeline-Concurrency Knobs (Tier 2.2 — Stateful-Forging-Plan).
+    # LightRAG serialisiert Inserts pro Instanz (RagManager._instance_locks),
+    # aber innerhalb einer Insert-Operation laufen Embedding- und LLM-Phase
+    # ueber LightRAG-eigene Semaphores parallel. Defaults konservativ:
+    #   - LLM=4 (Provider-Rate-Limit-vertraeglich; LightRAG-Default 4)
+    #   - Embedding=8 (Embed-Endpoints sind typischerweise schneller; bei
+    #     hoeheren Tier-Limits weiter erhoehen — LightRAG-Default 16)
+    # Beobachtung: Phase-1-Logs sollten mehrere ``lightrag:embed``-
+    # Token-Tracker-Records innerhalb von Sekunden zeigen (statt seriell).
+    LIGHTRAG_LLM_MAX_ASYNC = int(os.environ.get('LIGHTRAG_LLM_MAX_ASYNC', '4'))
+    LIGHTRAG_EMBEDDING_FUNC_MAX_ASYNC = int(os.environ.get('LIGHTRAG_EMBEDDING_FUNC_MAX_ASYNC', '8'))
+
     # Graph-Memory-Updater Throttling (Phase 4 Migration). Vorher hardcoded
     # in zep_graph_memory_updater (BATCH_SIZE=5, SEND_INTERVAL=0.5s) — bei
     # Zep war das billig, bei LightRAG entspricht jedes Insert einer vollen

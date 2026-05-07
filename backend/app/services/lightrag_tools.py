@@ -302,7 +302,7 @@ class LightRAGToolsService:
         """Lazy-LLM-Client (vermeidet Konstruktor-Zwang in Tests, die nur
         Such-Methoden ohne LLM brauchen)."""
         if self._llm is None:
-            self._llm = LLMClient()
+            self._llm = LLMClient.get_default()
         return self._llm
 
     # ------------------------------------------------------------------

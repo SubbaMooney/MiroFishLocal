@@ -151,7 +151,7 @@ class InterviewToolService:
     """
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
-        self.llm = llm_client or LLMClient()
+        self.llm = llm_client or LLMClient.get_default()
 
     def interview_agents(
         self,

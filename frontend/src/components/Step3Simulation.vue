@@ -462,26 +462,49 @@ const handleStopSimulation = async () => {
   }
 }
 
-// 轮询状态
-let statusTimer = null
-let detailTimer = null
+// 轮询状态 — Master-Tick (1s) statt zwei separater Intervalle.
+// Die "*Timer"-Flags repraesentieren weiterhin "Polling fuer Endpoint X aktiv?".
+let statusTimer = null   // Flag: fetchRunStatus aktiv (Intervall 2s)
+let detailTimer = null   // Flag: fetchRunStatusDetail aktiv (Intervall 3s)
+let masterTimer = null   // Tatsaechlicher setInterval-Handle (1s)
+let masterTick = 0       // Tick-Counter, +1 pro Sekunde
+
+// Master-Tick laeuft solange mind. ein Endpoint aktiv ist; pro Tick werden alle
+// faelligen Calls parallel via Promise.allSettled getriggert.
+const ensureMasterTimer = () => {
+  if (masterTimer) return
+  masterTick = 0
+  masterTimer = setInterval(runMasterTick, 1000)
+}
+
+const runMasterTick = async () => {
+  masterTick += 1
+  const due = []
+  if (statusTimer && masterTick % 2 === 0) due.push(fetchRunStatus())
+  if (detailTimer && masterTick % 3 === 0) due.push(fetchRunStatusDetail())
+  if (due.length > 0) {
+    await Promise.allSettled(due)
+  }
+}
 
 const startStatusPolling = () => {
-  statusTimer = setInterval(fetchRunStatus, 2000)
+  statusTimer = true
+  ensureMasterTimer()
 }
 
 const startDetailPolling = () => {
-  detailTimer = setInterval(fetchRunStatusDetail, 3000)
+  detailTimer = true
+  ensureMasterTimer()
 }
 
 const stopPolling = () => {
-  if (statusTimer) {
-    clearInterval(statusTimer)
-    statusTimer = null
-  }
-  if (detailTimer) {
-    clearInterval(detailTimer)
-    detailTimer = null
+  // Beide Flags abschalten und Master-Timer killen.
+  statusTimer = null
+  detailTimer = null
+  if (masterTimer) {
+    clearInterval(masterTimer)
+    masterTimer = null
+    masterTick = 0
   }
 }
 

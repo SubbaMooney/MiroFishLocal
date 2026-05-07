@@ -4,6 +4,7 @@
 """
 
 import os
+import concurrent.futures
 from pathlib import Path
 from typing import List, Optional
 
@@ -151,26 +152,46 @@ class FileParser:
         return _read_text_with_fallback(file_path)
     
     @classmethod
-    def extract_from_multiple(cls, file_paths: List[str]) -> str:
+    def extract_from_multiple(
+        cls,
+        file_paths: List[str],
+        max_workers: int = 8,
+    ) -> str:
         """
-        从多个文件提取文本并合并
-        
+        从多个文件提取文本并合并 (Tier 1.1: 并行化)
+
+        采用 ThreadPoolExecutor 并行执行 I/O-bound 的提取任务
+        (PyMuPDF + 编码探测均会释放 GIL)。结果按输入顺序拼接,
+        以保证输出确定性。
+
         Args:
             file_paths: 文件路径列表
-            
+            max_workers: 线程池大小 (默认 8, 上限按文件数收紧)
+
         Returns:
             合并后的文本
         """
-        all_texts = []
-        
-        for i, file_path in enumerate(file_paths, 1):
-            try:
-                text = cls.extract_text(file_path)
+        if not file_paths:
+            return ""
+
+        all_texts: List[str] = [""] * len(file_paths)
+        workers = min(max_workers, len(file_paths))
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix='mirofish-fileparser'
+        ) as executor:
+            # 按输入顺序保存 future, 之后按同一顺序读取结果 → 拼接顺序确定
+            futures = [executor.submit(cls.extract_text, fp) for fp in file_paths]
+            for i, (file_path, future) in enumerate(zip(file_paths, futures), 1):
                 filename = Path(file_path).name
-                all_texts.append(f"=== 文档 {i}: {filename} ===\n{text}")
-            except Exception as e:
-                all_texts.append(f"=== 文档 {i}: {file_path} (提取失败: {str(e)}) ===")
-        
+                try:
+                    text = future.result()
+                    all_texts[i - 1] = f"=== 文档 {i}: {filename} ===\n{text}"
+                except Exception as e:
+                    # 单个文件失败不应中断整个批次, 保持与原行为一致
+                    all_texts[i - 1] = f"=== 文档 {i}: {file_path} (提取失败: {str(e)}) ==="
+
         return "\n\n".join(all_texts)
 
 
