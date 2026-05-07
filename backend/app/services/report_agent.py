@@ -13,6 +13,7 @@ import os
 import json
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -912,7 +913,7 @@ class ReportAgent:
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
         
-        self.llm = llm_client or LLMClient()
+        self.llm = llm_client or LLMClient.get_default()
         # Tool-Backend (LightRAG-Service mit den 4 Report-Agent-Tools)
         self.tools = tools or LightRAGToolsService()
         # Tool-Definitionen (Schema-Dict, das dem LLM als Tool-Liste serviert wird)
@@ -2040,24 +2041,59 @@ class ReportAgent:
                     "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
                 }
             
-            # 执行工具调用（限制数量）
-            tool_results = []
-            for call in tool_calls[:1]:  # 每轮最多执行1次工具调用
-                if len(tool_calls_made) >= self.MAX_TOOL_CALLS_PER_CHAT:
-                    break
-                result = self._execute_tool(call["name"], call.get("parameters", {}))
-                # H2: Tool-Output sanitisieren (Defense-in-Depth gegen
-                # reflektierte Tool-Call-Injection im naechsten LLM-Turn).
-                result = self._scrub_tool_call_markup(result)
-                tool_results.append({
-                    "tool": call["name"],
-                    "result": result[:1500]  # 限制结果长度
-                })
+            # 执行工具调用（并行 + 限额）
+            # Tier 2.1: LLM schlaegt oft mehrere Tools parallel vor
+            # (Insight-Forge, Panorama, Quick-Search, Interview).
+            # Wir fuehren alle vorgeschlagenen Tools einer Iteration
+            # parallel via ThreadPoolExecutor aus (I/O-bound), respektieren
+            # MAX_TOOL_CALLS_PER_CHAT und behalten die deterministische
+            # Reihenfolge der Observations bei.
+            remaining_budget = self.MAX_TOOL_CALLS_PER_CHAT - len(tool_calls_made)
+            if remaining_budget <= 0:
+                # Budget bereits erschoepft → ReACT-Schleife beenden
+                break
+
+            planned = tool_calls[:remaining_budget]
+            if not planned:
+                # Defensiver Check: keine ausfuehrbaren Tools → abbrechen
+                break
+
+            # Vorallokierte Liste sichert Original-Reihenfolge der Observations
+            tool_results: List[Optional[Dict[str, str]]] = [None] * len(planned)
+
+            worker_cap = min(len(planned), 4)
+            with ThreadPoolExecutor(max_workers=worker_cap) as executor:
+                future_to_idx = {
+                    executor.submit(
+                        self._execute_tool,
+                        call["name"],
+                        call.get("parameters", {})
+                    ): idx
+                    for idx, call in enumerate(planned)
+                }
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    call = planned[idx]
+                    try:
+                        result = future.result()
+                    except Exception as e:
+                        # Robust: ein Tool-Crash darf den Report nicht killen
+                        result = f"[Tool-Error: {call['name']}: {e}]"
+                    # H2: Tool-Output sanitisieren (Defense-in-Depth gegen
+                    # reflektierte Tool-Call-Injection im naechsten LLM-Turn).
+                    result = self._scrub_tool_call_markup(result)
+                    tool_results[idx] = {
+                        "tool": call["name"],
+                        "result": result[:1500]  # 限制结果长度
+                    }
+
+            # tool_calls_made waechst in Original-Reihenfolge (deterministisch)
+            for call in planned:
                 tool_calls_made.append(call)
-            
+
             # 将结果添加到消息
             messages.append({"role": "assistant", "content": response})
-            observation = "\n".join([f"[{r['tool']}结果]\n{r['result']}" for r in tool_results])
+            observation = "\n".join([f"[{r['tool']}结果]\n{r['result']}" for r in tool_results if r is not None])
             messages.append({
                 "role": "user",
                 "content": observation + CHAT_OBSERVATION_SUFFIX

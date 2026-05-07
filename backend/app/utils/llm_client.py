@@ -1,10 +1,23 @@
 """
 LLM客户端封装
 统一使用OpenAI格式调用
+
+Tier 3.1 (stateful-forging-kernighan):
+    LLMClient ist stateless bzgl. der Aufruf-Argumente — alle Per-Call-Daten
+    (messages, temperature, purpose, ...) kommen ueber Methoden-Parameter,
+    nicht ueber Instanz-State. Damit ist ein Prozess-weiter Singleton sicher
+    und ermoeglicht httpx-Connection-Pool-Reuse innerhalb des OpenAI-SDK,
+    statt pro Konsument einen neuen TLS-Pool aufzubauen.
+
+    Konsumenten sollten ``LLMClient.get_default()`` nutzen statt ``LLMClient()``
+    aufzurufen. Der Konstruktor bleibt funktional fuer Test-/Override-Pfade
+    (z.B. eigener model-Override oder explizite Mocks ueber DI).
 """
 
 import json
+import os
 import re
+import threading
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
@@ -13,7 +26,18 @@ from ..config import Config
 
 class LLMClient:
     """LLM客户端"""
-    
+
+    # Class-level Singleton-Caches fuer Default- und Boost-Instanz.
+    # Double-Checked Locking via threading.Lock — nicht reentrant noetig.
+    _default_instance: Optional["LLMClient"] = None
+    _default_lock: threading.Lock = threading.Lock()
+
+    _boost_instance: Optional["LLMClient"] = None
+    _boost_lock: threading.Lock = threading.Lock()
+    # Sentinel fuer "Boost wurde geprueft und ist nicht konfiguriert" —
+    # vermeidet wiederholte env-Lookups + Logging in Hot-Paths.
+    _boost_unavailable: bool = False
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -23,10 +47,10 @@ class LLMClient:
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
-        
+
         if not self.api_key:
             raise ValueError("LLM_API_KEY 未配置")
-        
+
         # L1 (Audit): expliziter Timeout + max_retries, sonst hangt der
         # Worker-Thread bis zum openai-Default 600s wenn der Provider
         # nicht antwortet.
@@ -36,6 +60,79 @@ class LLMClient:
             timeout=Config.LLM_TIMEOUT_SECONDS,
             max_retries=Config.LLM_MAX_RETRIES,
         )
+
+    # ------------------------------------------------------------------
+    # Singleton-Accessor (Tier 3.1)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def get_default(cls) -> "LLMClient":
+        """Liefert die Prozess-weite Default-LLMClient-Instanz.
+
+        Lazy-initialisiert beim ersten Aufruf, threadsafe via DCL. Wirft die
+        Konstruktor-Exception (z.B. ``ValueError("LLM_API_KEY 未配置")``)
+        durch, wenn die Config nicht valid ist.
+
+        Wiederverwendet den selben httpx-Pool ueber ``self.client`` —
+        spart TLS-Handshakes bei haeufigen LLM-Calls.
+        """
+        # Fast path ohne Lock-Akquisition.
+        instance = cls._default_instance
+        if instance is not None:
+            return instance
+        with cls._default_lock:
+            # Re-check nach Lock-Akquisition (DCL).
+            if cls._default_instance is None:
+                cls._default_instance = cls()
+            return cls._default_instance
+
+    @classmethod
+    def get_boost(cls) -> Optional["LLMClient"]:
+        """Liefert eine Singleton-Instanz fuer den optionalen Boost-LLM.
+
+        Boost-Vars werden direkt aus ``os.environ`` gelesen (nicht in Config
+        gepflegt — siehe ``run_parallel_simulation.py``). Wenn nicht alle drei
+        ``LLM_BOOST_API_KEY`` / ``LLM_BOOST_BASE_URL`` / ``LLM_BOOST_MODEL_NAME``
+        gesetzt sind, gibt diese Methode ``None`` zurueck — Aufrufer koennen
+        damit auf ``get_default()`` faellen.
+        """
+        # Fast path: bereits gebaut oder als unavailable markiert.
+        instance = cls._boost_instance
+        if instance is not None:
+            return instance
+        if cls._boost_unavailable:
+            return None
+        with cls._boost_lock:
+            if cls._boost_instance is not None:
+                return cls._boost_instance
+            if cls._boost_unavailable:
+                return None
+            api_key = os.environ.get("LLM_BOOST_API_KEY", "").strip()
+            base_url = os.environ.get("LLM_BOOST_BASE_URL", "").strip()
+            model = os.environ.get("LLM_BOOST_MODEL_NAME", "").strip()
+            if not (api_key and base_url and model):
+                # Pruef-Ergebnis cachen — kein wiederholtes env-Lookup.
+                cls._boost_unavailable = True
+                return None
+            cls._boost_instance = cls(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+            )
+            return cls._boost_instance
+
+    @classmethod
+    def _reset_singletons_for_tests(cls) -> None:
+        """Test-Helper: setzt Singleton-Cache zurueck (z.B. nach env-Patches).
+
+        NICHT in Produktion aufrufen — bestehende Konsumenten halten weiter
+        Referenzen auf die alte Instanz, dadurch entstehen mehrere Pools.
+        """
+        with cls._default_lock:
+            cls._default_instance = None
+        with cls._boost_lock:
+            cls._boost_instance = None
+            cls._boost_unavailable = False
     
     def chat(
         self,

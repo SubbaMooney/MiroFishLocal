@@ -10,6 +10,7 @@
 4. 生成平台配置
 """
 
+import concurrent.futures
 import json
 import math
 import os
@@ -306,38 +307,84 @@ class SimulationConfigGenerator:
         )
         
         reasoning_parts = []
-        
-        # ========== 步骤1: 生成时间配置 ==========
-        report_progress(1, t('progress.generatingTimeConfig'))
         num_entities = len(entities)
-        if checkpoint["time_config_result"]:
-            time_config_result = checkpoint["time_config_result"]
-            logger.info("Phase-3 step 1: time_config aus Checkpoint uebernommen")
-        else:
-            time_config_result = self._generate_time_config(context, num_entities)
-            checkpoint["time_config_result"] = time_config_result
-            self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
-        time_config = self._parse_time_config(time_config_result, num_entities)
-        reasoning_parts.append(f"{t('progress.timeConfigLabel')}: {time_config_result.get('reasoning', t('common.success'))}")
 
-        # ========== 步骤2: 生成事件配置 ==========
-        report_progress(2, t('progress.generatingEventConfig'))
-        if checkpoint["event_config_result"]:
-            event_config_result = checkpoint["event_config_result"]
-            logger.info("Phase-3 step 2: event_config aus Checkpoint uebernommen")
+        # ========== 步骤1+2: 并行生成时间配置 + 事件配置 ==========
+        # Beide Configs sind datenmaessig unabhaengig (pure functions auf
+        # context/simulation_requirement/entities). Daher koennen sie parallel
+        # erzeugt werden. Resume-Logik: Falls einer/beide bereits im Checkpoint,
+        # wird kein ThreadPool gespawnt — nur fehlende werden inline/parallel
+        # generiert.
+        time_config_result: Optional[Dict[str, Any]] = checkpoint["time_config_result"]
+        event_config_result: Optional[Dict[str, Any]] = checkpoint["event_config_result"]
+
+        time_from_cp = time_config_result is not None
+        event_from_cp = event_config_result is not None
+
+        if time_from_cp and event_from_cp:
+            # Beide aus Checkpoint — kein LLM-Call noetig
+            logger.info("Phase-3 step 1+2: time_config + event_config aus Checkpoint uebernommen")
+            report_progress(1, t('progress.generatingTimeConfig'))
+            report_progress(2, t('progress.generatingEventConfig'))
+        elif not time_from_cp and not event_from_cp:
+            # Beide fehlen → parallel via ThreadPoolExecutor(max_workers=2)
+            report_progress(1, t('progress.generatingTimeConfig'))
+            logger.info("Phase-3 step 1+2: time_config + event_config parallel (max_workers=2)")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                future_map = {
+                    executor.submit(self._generate_time_config, context, num_entities): "time",
+                    executor.submit(
+                        self._generate_event_config, context, simulation_requirement, entities
+                    ): "event",
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    kind = future_map[future]
+                    result = future.result()  # raises bei Exception → kein silent-fail
+                    with checkpoint_lock:
+                        if kind == "time":
+                            time_config_result = result
+                            checkpoint["time_config_result"] = result
+                        else:
+                            event_config_result = result
+                            checkpoint["event_config_result"] = result
+                    # Inkrementelles Speichern nach jedem fertigen Job
+                    self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
+            report_progress(2, t('progress.generatingEventConfig'))
         else:
-            event_config_result = self._generate_event_config(context, simulation_requirement, entities)
-            checkpoint["event_config_result"] = event_config_result
-            self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
+            # Nur einer fehlt → kein Pool-Overhead, inline den fehlenden
+            report_progress(1, t('progress.generatingTimeConfig'))
+            if not time_from_cp:
+                logger.info("Phase-3 step 1: time_config wird generiert (event aus Checkpoint)")
+                time_config_result = self._generate_time_config(context, num_entities)
+                checkpoint["time_config_result"] = time_config_result
+                self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
+            else:
+                logger.info("Phase-3 step 1: time_config aus Checkpoint uebernommen")
+            if not event_from_cp:
+                logger.info("Phase-3 step 2: event_config wird generiert (time aus Checkpoint)")
+                event_config_result = self._generate_event_config(context, simulation_requirement, entities)
+                checkpoint["event_config_result"] = event_config_result
+                self._save_config_checkpoint(checkpoint_path, checkpoint, checkpoint_lock)
+            else:
+                logger.info("Phase-3 step 2: event_config aus Checkpoint uebernommen")
+            report_progress(2, t('progress.generatingEventConfig'))
+
+        # Parser laufen nach dem Join — pure, Reihenfolge irrelevant.
+        time_config = self._parse_time_config(time_config_result, num_entities)
         event_config = self._parse_event_config(event_config_result)
-        reasoning_parts.append(f"{t('progress.eventConfigLabel')}: {event_config_result.get('reasoning', t('common.success'))}")
+
+        # Reasoning-Output: erst time, dann event (visuelle Konsistenz)
+        reasoning_parts.append(
+            f"{t('progress.timeConfigLabel')}: {time_config_result.get('reasoning', t('common.success'))}"
+        )
+        reasoning_parts.append(
+            f"{t('progress.eventConfigLabel')}: {event_config_result.get('reasoning', t('common.success'))}"
+        )
         
         # ========== 步骤3-N: 分批生成Agent配置 (parallel + resume) ==========
         # Jeder Batch ist unabhaengig (pure func). Reihenfolge bleibt durch
         # batch_results[batch_idx] erhalten. Bereits gespeicherte Batches werden
         # aus dem Checkpoint geladen und nicht erneut LLM-generiert.
-        import concurrent.futures
-
         batch_results: List[Optional[List[AgentActivityConfig]]] = [None] * num_batches
         completed_count = [0]
 
